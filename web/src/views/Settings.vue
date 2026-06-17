@@ -880,11 +880,16 @@ async function handleTestOffline() {
 
       <div class="settings-tab-body">
         <!-- 账号管理 -->
-        <div v-if="activeTab === 'account'" class="space-y-4">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h3 class="text-lg text-gray-900 font-bold dark:text-gray-100">
-              账号管理
-            </h3>
+        <div v-if="activeTab === 'account'" class="account-workspace">
+          <div class="account-toolbar">
+            <div>
+              <h3 class="text-lg text-gray-900 font-bold dark:text-gray-100">
+                账号管理
+              </h3>
+              <p class="mt-1 text-xs text-[var(--theme-text-muted)]">
+                管理登录账号、运行状态和当前操作对象。
+              </p>
+            </div>
             <div class="flex flex-wrap gap-2">
               <BaseButton
                 v-if="userStore.isAdmin"
@@ -916,7 +921,7 @@ async function handleTestOffline() {
             <div>加载中...</div>
           </div>
 
-          <div v-else-if="accounts.length === 0" class="farm-card rounded-2xl bg-white py-12 text-center shadow-md dark:bg-gray-800">
+          <div v-else-if="accounts.length === 0" class="account-empty">
             <div class="settings-empty-icon">
               <span class="i-carbon-user-avatar" />
             </div>
@@ -934,97 +939,99 @@ async function handleTestOffline() {
             </BaseButton>
           </div>
 
-          <div v-else class="grid grid-cols-1 gap-4 lg:grid-cols-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div v-else class="account-list-panel">
+            <div class="account-list-head">
+              <span>账号</span>
+              <span>平台/绑定</span>
+              <span>状态</span>
+              <span class="text-right">操作</span>
+            </div>
             <div
               v-for="acc in accounts"
               :key="acc.id"
-              class="cursor-pointer border cartoon-card rounded-2xl bg-white p-3 shadow-md transition-all duration-200 dark:bg-gray-800 sm:p-4"
-              :class="String(currentAccountId) === String(acc.id)
-                ? 'ring-2'
-                : 'border-transparent'"
-              :style="String(currentAccountId) === String(acc.id)
-                ? { borderColor: 'var(--theme-primary)', backgroundColor: 'rgba(var(--theme-primary-rgb, 59, 130, 246), 0.1)' }
-                : {}"
+              role="button"
+              tabindex="0"
+              class="account-list-row"
+              :class="String(currentAccountId) === String(acc.id) ? 'account-list-row--active' : ''"
               @click="selectAccount(acc)"
+              @keydown.enter="selectAccount(acc)"
+              @keydown.space.prevent="selectAccount(acc)"
             >
-              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                <div class="min-w-0 flex flex-1 items-center gap-3">
-                  <div class="h-10 w-10 flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100 sm:h-12 sm:w-12 dark:bg-gray-700">
-                    <img v-if="acc.uin" :src="`https://q1.qlogo.cn/g?b=qq&nk=${acc.uin}&s=100`" class="h-full w-full object-cover">
-                    <span v-else class="i-carbon-user-avatar text-xl text-gray-400 sm:text-2xl" />
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <h4 class="truncate text-base font-bold sm:text-lg">
+              <div class="account-main-cell">
+                <div class="account-avatar">
+                  <img v-if="acc.uin" :src="`https://q1.qlogo.cn/g?b=qq&nk=${acc.uin}&s=100`" class="h-full w-full object-cover">
+                  <span v-else class="i-carbon-user-avatar text-xl text-gray-400" />
+                </div>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2">
+                    <h4 class="truncate text-sm text-[var(--theme-text)] font-semibold">
                       {{ acc.name || acc.nick || acc.id }}
                     </h4>
-                    <div class="mt-0.5 flex flex-wrap items-center gap-1.5">
-                      <span
-                        v-if="acc.platform"
-                        class="rounded px-1.5 py-0.5 text-[10px] font-medium leading-tight"
-                        :class="getPlatformClass(acc.platform)"
-                      >
-                        {{ getPlatformLabel(acc.platform) }}
-                      </span>
-                      <span class="truncate text-xs text-gray-500 sm:text-sm">
-                        {{ acc.uin || '未绑定' }}
-                      </span>
-                    </div>
+                    <span v-if="String(currentAccountId) === String(acc.id)" class="account-current-badge">当前</span>
                   </div>
-                </div>
-                <div class="flex items-center justify-end gap-2 sm:flex-col sm:items-end">
-                  <span class="flex items-center gap-1 text-xs text-gray-500 sm:hidden">
-                    <div class="h-2 w-2 rounded-full" :class="acc.running ? 'bg-green-500' : 'bg-gray-300'" />
-                    {{ acc.running ? '运行中' : '已停止' }}
-                  </span>
-                  <BaseButton
-                    variant="secondary"
-                    size="sm"
-                    class="border rounded-full shadow-sm transition-all duration-500 ease-in-out sm:w-20 active:scale-95"
-                    :class="acc.running ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100 focus:ring-red-500 active:border-red-300 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 dark:focus:ring-red-500 dark:active:border-red-700' : 'border-green-200 bg-green-50 text-green-600 hover:bg-green-100 focus:ring-green-500 active:border-green-300 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 dark:focus:ring-green-500 dark:active:border-green-700'"
-                    :disabled="!acc.running && isAccountOpsDisabled"
-                    :title="!acc.running && isAccountOpsDisabled ? '账号已到期，无法启动账号' : ''"
-                    @click="toggleAccount(acc)"
-                  >
-                    <span class="mr-1">{{ acc.running ? '■' : '▶' }}</span>
-                    {{ acc.running ? '停止' : '启动' }}
-                  </BaseButton>
+                  <div class="mt-1 truncate text-xs text-[var(--theme-text-muted)]">
+                    ID {{ acc.id }}
+                  </div>
                 </div>
               </div>
 
-              <div class="mt-3 flex items-center justify-between border-t border-gray-100 pt-3 sm:mt-4 dark:border-gray-700 sm:pt-4">
-                <div class="hidden items-center gap-2 text-sm text-gray-500 sm:flex">
-                  <span class="flex items-center gap-1">
-                    <div class="h-2 w-2 rounded-full" :class="acc.running ? 'bg-green-500' : 'bg-gray-300'" />
-                    {{ acc.running ? '运行中' : '已停止' }}
-                  </span>
-                </div>
+              <div class="account-meta-cell">
+                <span
+                  v-if="acc.platform"
+                  class="rounded px-1.5 py-0.5 text-[10px] font-medium leading-tight"
+                  :class="getPlatformClass(acc.platform)"
+                >
+                  {{ getPlatformLabel(acc.platform) }}
+                </span>
+                <span class="truncate text-xs text-[var(--theme-text-muted)]">
+                  {{ acc.uin || '未绑定' }}
+                </span>
+              </div>
 
-                <div class="flex flex-1 justify-end gap-1 sm:flex-initial sm:gap-2">
-                  <BaseButton
-                    variant="ghost"
-                    class="min-h-[36px] min-w-[36px] !p-2"
-                    title="设置"
-                    @click="openSettings(acc)"
-                  >
-                    <span class="i-carbon-settings" />
-                  </BaseButton>
-                  <BaseButton
-                    variant="ghost"
-                    class="min-h-[36px] min-w-[36px] !p-2"
-                    title="编辑"
-                    @click="openEditModal(acc)"
-                  >
-                    <span class="i-carbon-edit" />
-                  </BaseButton>
-                  <BaseButton
-                    variant="ghost"
-                    class="min-h-[36px] min-w-[36px] text-red-500 !p-2 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300"
-                    title="删除"
-                    @click="handleDelete(acc)"
-                  >
-                    <span class="i-carbon-trash-can" />
-                  </BaseButton>
-                </div>
+              <div class="account-status-cell">
+                <span class="account-status-pill" :class="acc.running ? 'account-status-pill--running' : 'account-status-pill--stopped'">
+                  <span class="account-status-dot" />
+                  {{ acc.running ? '运行中' : '已停止' }}
+                </span>
+              </div>
+
+              <div class="account-actions" @click.stop>
+                <BaseButton
+                  variant="secondary"
+                  size="sm"
+                  class="account-run-button"
+                  :class="acc.running ? 'account-run-button--stop' : 'account-run-button--start'"
+                  :disabled="!acc.running && isAccountOpsDisabled"
+                  :title="!acc.running && isAccountOpsDisabled ? '账号已到期，无法启动账号' : ''"
+                  @click="toggleAccount(acc)"
+                >
+                  <span :class="acc.running ? 'i-carbon-stop-filled-alt' : 'i-carbon-play-filled-alt'" />
+                  {{ acc.running ? '停止' : '启动' }}
+                </BaseButton>
+                <BaseButton
+                  variant="ghost"
+                  class="account-icon-button"
+                  title="设置"
+                  @click="openSettings(acc)"
+                >
+                  <span class="i-carbon-settings" />
+                </BaseButton>
+                <BaseButton
+                  variant="ghost"
+                  class="account-icon-button"
+                  title="编辑"
+                  @click="openEditModal(acc)"
+                >
+                  <span class="i-carbon-edit" />
+                </BaseButton>
+                <BaseButton
+                  variant="ghost"
+                  class="account-icon-button text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300"
+                  title="删除"
+                  @click="handleDelete(acc)"
+                >
+                  <span class="i-carbon-trash-can" />
+                </BaseButton>
               </div>
             </div>
           </div>
@@ -1768,6 +1775,175 @@ async function handleTestOffline() {
   border-radius: 6px;
 }
 
+.account-workspace {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.account-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.account-empty {
+  border: 1px dashed var(--settings-panel-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--theme-surface) 82%, transparent);
+  padding: 44px 16px;
+  text-align: center;
+}
+
+.account-list-panel {
+  overflow: hidden;
+  border: 1px solid var(--settings-panel-border);
+  border-radius: 8px;
+  background: var(--theme-surface);
+}
+
+.account-list-head,
+.account-list-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.4fr) minmax(160px, 0.7fr) minmax(120px, 0.55fr) minmax(260px, 0.9fr);
+  align-items: center;
+  column-gap: 16px;
+}
+
+.account-list-head {
+  border-bottom: 1px solid var(--settings-panel-border);
+  background: var(--theme-surface-soft);
+  padding: 10px 16px;
+  color: var(--theme-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.account-list-row {
+  width: 100%;
+  min-height: 72px;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--settings-panel-border);
+  background: transparent;
+  padding: 12px 16px 12px 13px;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color var(--theme-duration-fast),
+    border-color var(--theme-duration-fast);
+}
+
+.account-list-row:last-child {
+  border-bottom: 0;
+}
+
+.account-list-row:hover {
+  background: var(--theme-surface-soft);
+}
+
+.account-list-row--active {
+  border-left-color: var(--theme-primary);
+  background: color-mix(in srgb, var(--theme-primary) 7%, var(--theme-surface));
+}
+
+.account-main-cell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.account-avatar {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--settings-panel-border);
+  border-radius: 50%;
+  background: var(--theme-surface-soft);
+}
+
+.account-current-badge {
+  flex: 0 0 auto;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--theme-primary) 12%, transparent);
+  color: var(--theme-primary);
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.account-meta-cell {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.account-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.account-status-pill--running {
+  background: color-mix(in srgb, #16a34a 12%, transparent);
+  color: #15803d;
+}
+
+.account-status-pill--stopped {
+  background: color-mix(in srgb, var(--theme-text-muted) 12%, transparent);
+  color: var(--theme-text-muted);
+}
+
+.account-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.account-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.account-run-button {
+  min-height: 32px;
+  gap: 5px;
+  border-radius: 6px !important;
+}
+
+.account-run-button--start {
+  color: #15803d !important;
+  background: color-mix(in srgb, #16a34a 10%, transparent) !important;
+}
+
+.account-run-button--stop {
+  color: #dc2626 !important;
+  background: color-mix(in srgb, #dc2626 9%, transparent) !important;
+}
+
+.account-icon-button {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 7px !important;
+  border-radius: 6px !important;
+}
+
 @media (max-width: 768px) {
   .settings-tabs :deep(.el-tabs__header) {
     padding: 0 12px;
@@ -1779,6 +1955,24 @@ async function handleTestOffline() {
 
   .settings-tab-body {
     padding: 16px 14px 18px;
+  }
+
+  .account-toolbar {
+    flex-direction: column;
+  }
+
+  .account-list-head {
+    display: none;
+  }
+
+  .account-list-row {
+    grid-template-columns: 1fr;
+    row-gap: 10px;
+  }
+
+  .account-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }
 </style>

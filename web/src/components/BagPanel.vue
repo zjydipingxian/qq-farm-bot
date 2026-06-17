@@ -79,7 +79,7 @@ const selectedSellableCount = computed(() => {
 function getPriceClass(item: any) {
   const priceId = Number(item?.priceId || 0)
   if (priceId === 1005)
-    return 'text-amber-400 dark:text-amber-300'
+    return 'text-blue-500 dark:text-blue-300'
   if (priceId === 1002)
     return 'text-sky-400 dark:text-sky-300'
   return 'text-gray-400'
@@ -336,7 +336,8 @@ useIntervalFn(loadBag, 60000)
   <div class="space-y-4">
     <div class="mb-4 flex items-center justify-between">
       <h2 class="flex items-center gap-2 text-2xl font-bold font-display">
-        🎒 背包
+        <span class="i-carbon-wallet text-[var(--theme-primary)]" />
+        背包
       </h2>
       <div v-if="items.length" class="text-sm text-gray-500">
         共 {{ items.length }} 种物品
@@ -344,7 +345,7 @@ useIntervalFn(loadBag, 60000)
     </div>
 
     <div v-if="bagLoading || statusLoading" class="flex justify-center py-12">
-      <span class="animate-spin text-4xl">⏳</span>
+      <span class="i-svg-spinners-90-ring-with-bg text-4xl text-[var(--theme-primary)]" />
     </div>
 
     <div v-else-if="!currentAccountId" class="farm-card rounded-xl p-8 text-center text-gray-500">
@@ -361,9 +362,7 @@ useIntervalFn(loadBag, 60000)
     </div>
 
     <div v-else-if="!status?.connection?.connected" class="flex flex-col items-center justify-center gap-4 farm-card rounded-xl p-12 text-center text-gray-500">
-      <div class="text-4xl" style="opacity: 0.5">
-        📡
-      </div>
+      <div class="i-carbon-cloud-offline text-4xl text-gray-400" />
       <div>
         <div class="text-lg font-medium" style="color: var(--theme-text, #374151)">
           账号未登录
@@ -389,7 +388,14 @@ useIntervalFn(loadBag, 60000)
             : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'"
           @click="selectedCategory = cat.value"
         >
-          {{ cat.value === 'fruit' ? '🍎' : cat.value === 'seed' ? '🌱' : cat.value === 'tool' ? '🔧' : cat.value === 'other' ? '📦' : '📋' }}
+          <span
+            class="inline-block align-[-2px]"
+            :class="cat.value === 'fruit' ? 'i-carbon-crop-growth'
+              : cat.value === 'seed' ? 'i-carbon-sprout'
+                : cat.value === 'tool' ? 'i-carbon-tools'
+                  : cat.value === 'other' ? 'i-carbon-package'
+                    : 'i-carbon-list-boxes'"
+          />
           {{ cat.label }}
           <span class="ml-1 text-xs opacity-70">({{ categoryCounts[cat.value] || 0 }})</span>
         </button>
@@ -455,7 +461,7 @@ useIntervalFn(loadBag, 60000)
               </button>
               <button
                 v-if="canUse(item)"
-                class="cartoon-btn rounded-lg bg-green-500 px-1.5 py-0.5 text-[10px] text-white opacity-70 transition dark:bg-green-600 hover:opacity-100"
+                class="cartoon-btn rounded-lg bg-cyan-600 px-1.5 py-0.5 text-[10px] text-white opacity-70 transition dark:bg-cyan-500 hover:opacity-100"
                 title="使用全部"
                 @click.stop="handleUseClick(item)"
               >
@@ -501,11 +507,17 @@ useIntervalFn(loadBag, 60000)
               <span
                 class="inline-block rounded-md px-1.5 py-0.5 text-[10px] font-bold"
                 :class="getItemCategory(item) === 'fruit' ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
-                  : getItemCategory(item) === 'seed' ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+                  : getItemCategory(item) === 'seed' ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300'
                     : getItemCategory(item) === 'tool' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
                       : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'"
               >
-                {{ getItemCategory(item) === 'fruit' ? '🍎' : getItemCategory(item) === 'seed' ? '🌱' : getItemCategory(item) === 'tool' ? '🔧' : '📦' }}
+                <span
+                  class="inline-block align-[-2px]"
+                  :class="getItemCategory(item) === 'fruit' ? 'i-carbon-crop-growth'
+                    : getItemCategory(item) === 'seed' ? 'i-carbon-sprout'
+                      : getItemCategory(item) === 'tool' ? 'i-carbon-tools'
+                        : 'i-carbon-package'"
+                />
                 {{ item.itemType || 0 }}
               </span>
               <span v-if="item.level > 0"> · Lv{{ item.level }}</span>

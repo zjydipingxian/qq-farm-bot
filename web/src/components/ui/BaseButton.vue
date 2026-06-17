@@ -114,9 +114,10 @@ function handleClick(event: MouseEvent) {
 
 <style scoped>
 .base-button {
-  min-height: 36px;
+  min-height: 38px;
   border-radius: var(--theme-radius-md);
-  font-weight: 650;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .base-button--block {

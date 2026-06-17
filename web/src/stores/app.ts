@@ -15,7 +15,9 @@ interface ThemeTokens {
   text: string
   textMuted: string
   border: string
+  borderSubtle: string
   primary: string
+  primaryRgb: string
   primarySoft: string
   secondary: string
   success: string
@@ -27,37 +29,41 @@ interface ThemeTokens {
 const themeTokens: Record<Theme, ThemeTokens> = {
   light: {
     isDark: false,
-    bg: '#f7f8fa',
-    page: '#f2f3f5',
+    bg: '#f8fafc',
+    page: '#eef3f8',
     surface: '#ffffff',
-    surfaceSoft: '#f7f8fa',
-    text: '#1f2329',
-    textMuted: '#646a73',
-    border: '#dee0e3',
-    primary: '#3370ff',
-    primarySoft: '#e8efff',
-    secondary: '#7b67ee',
-    success: '#2ea121',
-    warning: '#f54a45',
-    danger: '#f54a45',
-    gradient: 'linear-gradient(135deg, #3370ff 0%, #7b67ee 100%)',
+    surfaceSoft: '#f5f7fb',
+    text: '#172033',
+    textMuted: '#667085',
+    border: '#d8e0ec',
+    borderSubtle: '#e7edf5',
+    primary: '#2563eb',
+    primaryRgb: '37, 99, 235',
+    primarySoft: '#dbeafe',
+    secondary: '#475569',
+    success: '#0f766e',
+    warning: '#c2410c',
+    danger: '#dc2626',
+    gradient: 'linear-gradient(135deg, #1e40af 0%, #0f172a 100%)',
   },
   dark: {
     isDark: true,
-    bg: '#101319',
-    page: '#171a22',
-    surface: '#1f2430',
-    surfaceSoft: '#252b38',
-    text: '#f2f3f5',
-    textMuted: '#a8abb2',
-    border: '#333948',
-    primary: '#5b8cff',
-    primarySoft: '#25365f',
-    secondary: '#9b8cff',
-    success: '#4cc05f',
-    warning: '#ff9c40',
-    danger: '#ff6b66',
-    gradient: 'linear-gradient(135deg, #5b8cff 0%, #9b8cff 100%)',
+    bg: '#0b1120',
+    page: '#111827',
+    surface: '#172033',
+    surfaceSoft: '#1f2a44',
+    text: '#f8fafc',
+    textMuted: '#a7b1c2',
+    border: '#334155',
+    borderSubtle: '#273449',
+    primary: '#60a5fa',
+    primaryRgb: '96, 165, 250',
+    primarySoft: '#1e3a5f',
+    secondary: '#94a3b8',
+    success: '#2dd4bf',
+    warning: '#fb923c',
+    danger: '#f87171',
+    gradient: 'linear-gradient(135deg, #2563eb 0%, #0f172a 100%)',
   },
 }
 
@@ -82,7 +88,9 @@ function applyCssTokens(theme: Theme) {
   root.style.setProperty('--theme-text', t.text)
   root.style.setProperty('--theme-text-muted', t.textMuted)
   root.style.setProperty('--theme-border', t.border)
+  root.style.setProperty('--theme-border-subtle', t.borderSubtle)
   root.style.setProperty('--theme-primary', t.primary)
+  root.style.setProperty('--theme-primary-rgb', t.primaryRgb)
   root.style.setProperty('--theme-primary-soft', t.primarySoft)
   root.style.setProperty('--theme-secondary', t.secondary)
   root.style.setProperty('--theme-success', t.success)
@@ -90,13 +98,13 @@ function applyCssTokens(theme: Theme) {
   root.style.setProperty('--theme-danger', t.danger)
   root.style.setProperty('--theme-gradient', t.gradient)
 
-  root.style.setProperty('--theme-radius-sm', '3px')
-  root.style.setProperty('--theme-radius-md', '4px')
-  root.style.setProperty('--theme-radius-lg', '6px')
-  root.style.setProperty('--theme-radius-xl', '8px')
-  root.style.setProperty('--theme-shadow-sm', '0 1px 2px rgba(31, 35, 41, 0.04)')
-  root.style.setProperty('--theme-shadow-md', '0 4px 16px rgba(31, 35, 41, 0.06)')
-  root.style.setProperty('--theme-shadow-lg', '0 8px 28px rgba(31, 35, 41, 0.1)')
+  root.style.setProperty('--theme-radius-sm', '4px')
+  root.style.setProperty('--theme-radius-md', '6px')
+  root.style.setProperty('--theme-radius-lg', '8px')
+  root.style.setProperty('--theme-radius-xl', '10px')
+  root.style.setProperty('--theme-shadow-sm', '0 1px 2px rgba(15, 23, 42, 0.04)')
+  root.style.setProperty('--theme-shadow-md', '0 8px 24px rgba(15, 23, 42, 0.07)')
+  root.style.setProperty('--theme-shadow-lg', '0 18px 42px rgba(15, 23, 42, 0.12)')
 
   root.style.setProperty('--el-color-primary', t.primary)
   root.style.setProperty('--el-color-success', t.success)
@@ -112,7 +120,7 @@ function applyCssTokens(theme: Theme) {
   root.style.setProperty('--el-border-color-light', t.border)
   root.style.setProperty('--el-fill-color-blank', t.surface)
   root.style.setProperty('--el-fill-color-light', t.surfaceSoft)
-  root.style.setProperty('--el-border-radius-base', '4px')
+  root.style.setProperty('--el-border-radius-base', '6px')
 }
 
 export const useAppStore = defineStore('app', () => {

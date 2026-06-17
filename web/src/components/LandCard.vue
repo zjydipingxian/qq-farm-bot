@@ -297,25 +297,25 @@ function getPlantSizeText(land: any) {
 }
 
 .level-1 {
-  --land-accent: #c69a2d;
-  --land-accent-2: #dfbd62;
-  --land-accent-strong: #8a6416;
-  --land-border: #ead9a8;
-  --land-surface: linear-gradient(180deg, #fffdf8 0%, #fffaf0 100%);
-  --land-preview: #fff7df;
-  --land-track: #efe5c9;
-  --land-footer: #fffaf0;
+  --land-accent: #64748b;
+  --land-accent-2: #94a3b8;
+  --land-accent-strong: #475569;
+  --land-border: #d5deeb;
+  --land-surface: linear-gradient(180deg, #ffffff 0%, #f6f8fb 100%);
+  --land-preview: #f1f5f9;
+  --land-track: #e2e8f0;
+  --land-footer: #f8fafc;
 }
 
 .level-2 {
-  --land-accent: #b9634f;
-  --land-accent-2: #d48a72;
-  --land-accent-strong: #884131;
-  --land-border: #e8c4b8;
-  --land-surface: linear-gradient(180deg, #fffafa 0%, #fff3ef 100%);
-  --land-preview: #fff0ea;
-  --land-track: #f0d8d0;
-  --land-footer: #fff6f3;
+  --land-accent: #3b82f6;
+  --land-accent-2: #60a5fa;
+  --land-accent-strong: #1d4ed8;
+  --land-border: #c7d7f5;
+  --land-surface: linear-gradient(180deg, #ffffff 0%, #f3f7ff 100%);
+  --land-preview: #eaf2ff;
+  --land-track: #dce8fb;
+  --land-footer: #f6f9ff;
 }
 
 .level-3 {
@@ -330,23 +330,23 @@ function getPlantSizeText(land: any) {
 }
 
 .level-4 {
-  --land-accent: #d6a019;
-  --land-accent-2: #f1d06a;
-  --land-accent-strong: #94660d;
-  --land-border: #e8cf7d;
-  --land-surface: linear-gradient(180deg, #fffdf6 0%, #fff7df 100%);
-  --land-preview: linear-gradient(135deg, #fff7d7 0%, #fffdf4 100%);
-  --land-track: #efe2bd;
-  --land-footer: #fff9e8;
+  --land-accent: #0e7490;
+  --land-accent-2: #38bdf8;
+  --land-accent-strong: #155e75;
+  --land-border: #b9dceb;
+  --land-surface: linear-gradient(180deg, #ffffff 0%, #eff8fb 100%);
+  --land-preview: linear-gradient(135deg, #e8f7fb 0%, #f8fbff 100%);
+  --land-track: #d7edf4;
+  --land-footer: #f2fafc;
 }
 
 .level-5 {
   --land-accent: #7c5cff;
-  --land-accent-2: #d7a72f;
+  --land-accent-2: #38bdf8;
   --land-accent-strong: #5a3fd1;
   --land-border: #d6c9ff;
   --land-surface: linear-gradient(180deg, #fdfbff 0%, #f6f1ff 100%);
-  --land-preview: radial-gradient(circle at 70% 20%, rgba(215, 167, 47, 0.18), transparent 42%), #f2edff;
+  --land-preview: linear-gradient(135deg, #f2edff 0%, #edf8ff 100%);
   --land-track: #e6defa;
   --land-footer: #f9f6ff;
 }
@@ -371,25 +371,25 @@ function getPlantSizeText(land: any) {
 }
 
 :global(html.dark) .level-1 {
-  --land-accent: #c79a31;
-  --land-accent-2: #e0be61;
-  --land-accent-strong: #f0d58a;
-  --land-border: #594a26;
-  --land-surface: linear-gradient(180deg, #29261d 0%, #252217 100%);
-  --land-preview: #332b18;
-  --land-track: #42391f;
-  --land-footer: #29261c;
+  --land-accent: #94a3b8;
+  --land-accent-2: #cbd5e1;
+  --land-accent-strong: #e2e8f0;
+  --land-border: #3d4a5f;
+  --land-surface: linear-gradient(180deg, #1b2538 0%, #172033 100%);
+  --land-preview: #223047;
+  --land-track: #334155;
+  --land-footer: #1d293c;
 }
 
 :global(html.dark) .level-2 {
-  --land-accent: #c87662;
-  --land-accent-2: #e19783;
-  --land-accent-strong: #f0b4a4;
-  --land-border: #5a3832;
-  --land-surface: linear-gradient(180deg, #2d2423 0%, #271f1d 100%);
-  --land-preview: #362624;
-  --land-track: #49332f;
-  --land-footer: #2e2422;
+  --land-accent: #60a5fa;
+  --land-accent-2: #93c5fd;
+  --land-accent-strong: #bfdbfe;
+  --land-border: #29496f;
+  --land-surface: linear-gradient(180deg, #1b263d 0%, #162033 100%);
+  --land-preview: #1d3558;
+  --land-track: #294666;
+  --land-footer: #1a263a;
 }
 
 :global(html.dark) .level-3 {
@@ -404,23 +404,23 @@ function getPlantSizeText(land: any) {
 }
 
 :global(html.dark) .level-4 {
-  --land-accent: #d2a324;
-  --land-accent-2: #f1cf69;
-  --land-accent-strong: #f3d981;
-  --land-border: #6a5524;
-  --land-surface: linear-gradient(180deg, #2e291b 0%, #272316 100%);
-  --land-preview: linear-gradient(135deg, #403415 0%, #2a2619 100%);
-  --land-track: #4a3f24;
-  --land-footer: #2c281b;
+  --land-accent: #22d3ee;
+  --land-accent-2: #7dd3fc;
+  --land-accent-strong: #a5f3fc;
+  --land-border: #255768;
+  --land-surface: linear-gradient(180deg, #172a38 0%, #142333 100%);
+  --land-preview: linear-gradient(135deg, #193648 0%, #172637 100%);
+  --land-track: #244858;
+  --land-footer: #172c3a;
 }
 
 :global(html.dark) .level-5 {
   --land-accent: #9b8cff;
-  --land-accent-2: #d7a72f;
+  --land-accent-2: #38bdf8;
   --land-accent-strong: #c7bdff;
   --land-border: #594f84;
   --land-surface: linear-gradient(180deg, #29243a 0%, #211d30 100%);
-  --land-preview: radial-gradient(circle at 70% 20%, rgba(215, 167, 47, 0.2), transparent 42%), #30284b;
+  --land-preview: linear-gradient(135deg, #30284b 0%, #1f3348 100%);
   --land-track: #423960;
   --land-footer: #282238;
 }

@@ -98,11 +98,11 @@ function isActive(path: string) {
 
 <style scoped>
 .sidebar-brand {
-  height: 56px;
+  height: 58px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--theme-border);
+  border-bottom: 1px solid var(--theme-border-subtle, var(--theme-border));
   padding: 0 12px 0 16px;
 }
 
@@ -134,21 +134,24 @@ function isActive(path: string) {
 }
 
 .brand-logo {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   display: grid;
   flex-shrink: 0;
   place-items: center;
-  border-radius: 6px;
-  background: var(--theme-primary);
+  border: 1px solid color-mix(in srgb, var(--theme-primary) 28%, var(--theme-border));
+  border-radius: var(--theme-radius-md);
+  background: var(--theme-primary-soft);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 55%, transparent);
   color: white;
+  color: var(--theme-primary);
   font-size: 17px;
 }
 
 .brand-title {
   overflow: hidden;
   color: var(--theme-text);
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -187,7 +190,7 @@ function isActive(path: string) {
 .sidebar-nav {
   flex: 1;
   overflow-y: auto;
-  padding: 10px 8px;
+  padding: 12px 8px;
 }
 
 .app-sidebar--collapsed .sidebar-nav {
@@ -195,11 +198,12 @@ function isActive(path: string) {
 }
 
 .nav-link {
-  height: 36px;
+  height: 38px;
   display: flex;
   align-items: center;
   gap: 10px;
   border-radius: var(--theme-radius-md);
+  border: 1px solid transparent;
   color: var(--theme-text-muted);
   font-size: 13px;
   font-weight: 500;
@@ -227,9 +231,10 @@ function isActive(path: string) {
 }
 
 .nav-link--active {
-  background: var(--theme-primary-soft);
+  border-color: color-mix(in srgb, var(--theme-primary) 24%, var(--theme-border));
+  background: color-mix(in srgb, var(--theme-primary) 11%, var(--theme-surface));
   color: var(--theme-primary);
-  font-weight: 600;
+  font-weight: 650;
 }
 
 .nav-icon {
@@ -240,7 +245,7 @@ function isActive(path: string) {
 }
 
 .sidebar-footer {
-  border-top: 1px solid var(--theme-border);
+  border-top: 1px solid var(--theme-border-subtle, var(--theme-border));
   padding: 10px;
 }
 
@@ -248,7 +253,9 @@ function isActive(path: string) {
   display: flex;
   align-items: center;
   gap: 8px;
+  border: 1px solid var(--theme-border-subtle, var(--theme-border));
   border-radius: var(--theme-radius-md);
+  background: var(--theme-surface-soft);
   padding: 8px;
 }
 

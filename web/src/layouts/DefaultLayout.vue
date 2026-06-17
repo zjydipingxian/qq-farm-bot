@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useIntervalFn, useNow } from '@vueuse/core'
+import { useIntervalFn } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -7,7 +7,7 @@ import api from '@/api'
 import AccountModal from '@/components/AccountModal.vue'
 import Sidebar from '@/components/Sidebar.vue'
 import { menuRoutes } from '@/router/menu'
-import { getPlatformLabel, useAccountStore } from '@/stores/account'
+import { useAccountStore } from '@/stores/account'
 import { useAppStore } from '@/stores/app'
 import { useStatusStore } from '@/stores/status'
 import { useUserStore } from '@/stores/user'
@@ -25,11 +25,6 @@ const { status, realtimeConnected } = storeToRefs(statusStore)
 const showAccountModal = ref(false)
 const accountToEdit = ref<any>(null)
 const systemConnected = ref(true)
-const serverUptimeBase = ref(0)
-const serverVersion = ref('')
-const lastPingTime = ref(Date.now())
-const now = useNow()
-const appVersion = __APP_VERSION__
 
 const showRenewModal = ref(false)
 const renewCardCode = ref('')
@@ -65,14 +60,6 @@ const accountOptions = computed(() => accounts.value.map(acc => ({
   value: String(acc.id),
 })))
 
-const uptime = computed(() => {
-  const diff = Math.max(0, Math.floor(serverUptimeBase.value + (now.value.getTime() - lastPingTime.value) / 1000))
-  const h = Math.floor(diff / 3600)
-  const m = Math.floor((diff % 3600) / 60)
-  const s = diff % 60
-  return `${h}h ${m}m ${s}s`
-})
-
 const connectionStatus = computed(() => {
   if (!systemConnected.value)
     return { label: '系统离线', type: 'danger' as const, pulse: false }
@@ -85,16 +72,8 @@ const connectionStatus = computed(() => {
 
 async function checkConnection() {
   try {
-    const res = await api.get('/api/ping')
+    await api.get('/api/ping')
     systemConnected.value = true
-    if (res.data?.ok && res.data?.data) {
-      if (res.data.data.uptime) {
-        serverUptimeBase.value = res.data.data.uptime
-        lastPingTime.value = Date.now()
-      }
-      if (res.data.data.version)
-        serverVersion.value = res.data.data.version
-    }
 
     const accountRef = currentAccount.value?.id || currentAccount.value?.uin
     if (accountRef)
@@ -325,7 +304,7 @@ useIntervalFn(() => {
       </div>
 
       <div class="page-scroll">
-        <div class="quick-panel mb-4">
+        <!-- Global quick cards moved into Dashboard only.
           <div class="quick-card">
             <span class="quick-icon i-carbon-user-avatar" />
             <div>
@@ -370,7 +349,7 @@ useIntervalFn(() => {
               </div>
             </div>
           </div>
-        </div>
+        -->
 
         <RouterView v-slot="{ Component, route: currentRoute }">
           <Transition name="slide-fade" mode="out-in">
@@ -418,21 +397,24 @@ useIntervalFn(() => {
 }
 
 .top-icon {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   display: grid;
   flex-shrink: 0;
   place-items: center;
-  border: 1px solid transparent;
+  border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius-md);
-  background: transparent;
+  background: var(--theme-surface);
   color: var(--theme-text-muted);
   cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
 
 .top-icon:hover {
   background: var(--theme-surface-soft);
+  border-color: color-mix(in srgb, var(--theme-primary) 30%, var(--theme-border));
   color: var(--theme-text);
+  box-shadow: var(--theme-shadow-sm);
 }
 
 .title-block {
@@ -453,7 +435,7 @@ useIntervalFn(() => {
 .page-title {
   margin: 0;
   color: var(--theme-text);
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 700;
 }
 
@@ -468,20 +450,23 @@ useIntervalFn(() => {
 }
 
 .user-trigger {
-  height: 32px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  border: 0;
+  border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius-md);
-  background: transparent;
+  background: var(--theme-surface);
   color: var(--theme-text);
-  padding: 0 6px;
+  padding: 0 8px;
   cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .user-trigger:hover {
   background: var(--theme-surface-soft);
+  border-color: color-mix(in srgb, var(--theme-primary) 30%, var(--theme-border));
+  box-shadow: var(--theme-shadow-sm);
 }
 
 .user-avatar {
@@ -490,7 +475,7 @@ useIntervalFn(() => {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: linear-gradient(135deg, #7b67ee, #3370ff);
+  background: var(--theme-gradient);
   color: white;
   font-size: 12px;
   font-weight: 700;
@@ -499,7 +484,7 @@ useIntervalFn(() => {
 .quick-panel {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 
 .quick-card {
@@ -510,19 +495,26 @@ useIntervalFn(() => {
   border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius-lg);
   background: var(--theme-surface);
-  padding: 12px;
+  box-shadow: var(--theme-shadow-sm);
+  padding: 12px 14px;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.quick-card:hover {
+  border-color: color-mix(in srgb, var(--theme-primary) 24%, var(--theme-border));
+  box-shadow: var(--theme-shadow-md);
 }
 
 .quick-icon {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   display: grid;
   flex-shrink: 0;
   place-items: center;
   border-radius: var(--theme-radius-md);
   background: var(--theme-primary-soft);
   color: var(--theme-primary);
-  font-size: 17px;
+  font-size: 18px;
 }
 
 .quick-label {
@@ -535,7 +527,7 @@ useIntervalFn(() => {
   margin-top: 3px;
   color: var(--theme-text);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

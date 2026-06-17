@@ -131,7 +131,7 @@ async function confirmAction(message: string, action: () => Promise<any>, type: 
   }
 }
 
-const expandedFriends = ref<Set<string>>(new Set())
+const selectedFriendId = ref('')
 const currentPage = ref(1)
 const pageSize = 25
 
@@ -165,6 +165,14 @@ const paginatedFriends = computed(() => {
   return filteredFriends.value.slice(start, end)
 })
 
+const selectedFriend = computed(() => {
+  if (!selectedFriendId.value)
+    return paginatedFriends.value[0] || filteredFriends.value[0] || null
+  return filteredFriends.value.find((friend: any) => String(friend.gid) === selectedFriendId.value) || paginatedFriends.value[0] || null
+})
+
+const selectedFriendKey = computed(() => selectedFriend.value ? String(selectedFriend.value.gid) : '')
+
 function goToPage(page: number) {
   currentPage.value = Math.max(1, Math.min(page, totalPages.value))
 }
@@ -172,6 +180,23 @@ function goToPage(page: number) {
 watch(searchKeyword, () => {
   currentPage.value = 1
 })
+
+function selectFriend(friendId: string | number) {
+  const key = String(friendId)
+  selectedFriendId.value = key
+  if (currentAccountId.value && currentAccount.value?.running && status.value?.connection?.connected)
+    friendStore.fetchFriendLands(currentAccountId.value, key)
+}
+
+watch(paginatedFriends, (list) => {
+  if (list.length === 0) {
+    selectedFriendId.value = ''
+    return
+  }
+  const existsOnPage = list.some((friend: any) => String(friend.gid) === selectedFriendId.value)
+  if (!selectedFriendId.value || !existsOnPage)
+    selectFriend(list[0].gid)
+}, { immediate: true })
 
 const filteredInteractRecords = computed(() => {
   if (interactFilter.value === 'all')
@@ -225,7 +250,7 @@ onMounted(() => {
 })
 
 watch(currentAccountId, () => {
-  expandedFriends.value.clear()
+  selectedFriendId.value = ''
   loadData()
 })
 
@@ -241,19 +266,6 @@ async function handleRefreshFriends() {
     // ignore
   }
   await friendStore.fetchFriends(currentAccountId.value, true)
-}
-
-function toggleFriend(friendId: string) {
-  if (expandedFriends.value.has(friendId)) {
-    expandedFriends.value.delete(friendId)
-  }
-  else {
-    expandedFriends.value.clear()
-    expandedFriends.value.add(friendId)
-    if (currentAccountId.value && currentAccount.value?.running && status.value?.connection?.connected) {
-      friendStore.fetchFriendLands(currentAccountId.value, friendId)
-    }
-  }
 }
 
 async function handleOp(friendId: string, type: string, e: Event) {
@@ -411,7 +423,7 @@ function getInteractBadgeClass(actionType: number) {
   if (Number(actionType) === 1)
     return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
   if (Number(actionType) === 2)
-    return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+    return 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300'
   if (Number(actionType) === 3)
     return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
   return 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
@@ -553,21 +565,28 @@ async function handleBatchAddKnownFriendGids() {
 </script>
 
 <template>
-  <div class="p-4">
-    <div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <h2 class="flex items-center gap-2 text-2xl font-bold font-display">
-        👥 好友
-      </h2>
-      <div class="flex items-center gap-3">
+  <div class="friends-page p-4">
+    <div class="friends-header mb-3 flex flex-wrap items-center justify-start gap-2">
+      <div class="flex flex-wrap items-center justify-start gap-2">
         <div v-if="activeTab === 'friends'" class="relative">
-          <span class="absolute left-3 top-1/2 text-gray-400 -translate-y-1/2">🔍</span>
+          <span class="i-carbon-search absolute left-3 top-1/2 text-gray-400 -translate-y-1/2" />
           <input
             v-model="searchKeyword"
             type="text"
             placeholder="搜索好友..."
-            class="w-full border farm-input border-gray-300 rounded-xl bg-white py-2 pl-10 pr-4 text-sm sm:w-64 dark:border-gray-600 focus:border-blue-500 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="h-9 w-full border farm-input border-gray-300 rounded-lg bg-white py-1.5 pl-10 pr-4 text-sm sm:w-64 dark:border-gray-600 focus:border-blue-500 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
         </div>
+        <ElButton
+          v-if="activeTab === 'friends'"
+          size="small"
+          :loading="loading"
+          :disabled="loading"
+          @click="handleRefreshFriends"
+        >
+          <span v-if="!loading" class="i-carbon-renew mr-1" />
+          刷新列表
+        </ElButton>
         <div v-if="activeTab === 'friends' && friends.length" class="text-sm text-gray-500">
           共 {{ filteredFriends.length }}/{{ friends.length }} 名好友
         </div>
@@ -580,11 +599,11 @@ async function handleBatchAddKnownFriendGids() {
       </div>
     </div>
 
-    <div class="mb-4 flex border-b border-gray-200 dark:border-gray-700">
+    <div class="friends-tabs mb-3 flex border-b border-gray-200 dark:border-gray-700">
       <button
         v-for="tab in TABS"
         :key="tab.key"
-        class="flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors"
+        class="flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
         :class="activeTab === tab.key
           ? 'border-b-2'
           : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'"
@@ -603,11 +622,11 @@ async function handleBatchAddKnownFriendGids() {
     </div>
 
     <div v-if="loading || statusLoading || interactLoading" class="flex justify-center py-12">
-      <span class="animate-spin text-4xl">⏳</span>
+      <span class="i-svg-spinners-90-ring-with-bg text-4xl text-[var(--theme-primary)]" />
     </div>
 
     <div v-else-if="!currentAccountId" class="flex flex-col items-center justify-center gap-4 farm-card rounded-2xl bg-white p-12 text-center text-gray-500 shadow-md dark:bg-gray-800">
-      <span class="text-4xl text-gray-400">👤</span>
+      <span class="i-carbon-user-avatar text-4xl text-gray-400" />
       <div>
         <div class="text-lg text-gray-700 font-medium dark:text-gray-300">
           未登录账号
@@ -619,7 +638,7 @@ async function handleBatchAddKnownFriendGids() {
     </div>
 
     <div v-else-if="!status?.connection?.connected" class="flex flex-col items-center justify-center gap-4 farm-card rounded-2xl bg-white p-12 text-center text-gray-500 shadow-md dark:bg-gray-800">
-      <span class="text-4xl text-gray-400">📡</span>
+      <span class="i-carbon-cloud-offline text-4xl text-gray-400" />
       <div>
         <div class="text-lg text-gray-700 font-medium dark:text-gray-300">
           账号未登录
@@ -631,17 +650,17 @@ async function handleBatchAddKnownFriendGids() {
     </div>
 
     <template v-else>
-      <div v-if="activeTab === 'friends'" class="space-y-4">
-        <div v-if="currentAccountId && isQqAccount" class="mb-4 border farm-card border-amber-200 rounded-2xl bg-white p-4 shadow-md dark:border-amber-700/50 dark:bg-gray-800">
+      <div v-if="activeTab === 'friends'" class="friends-workspace space-y-3">
+        <div v-if="currentAccountId && isQqAccount" class="mb-3 border border-[var(--theme-border-subtle)] rounded-lg bg-[var(--theme-surface)] px-4 py-3">
           <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div class="flex items-center gap-2">
-                <span class="text-lg text-amber-500">📋</span>
+                <span class="i-carbon-data-base text-lg text-[var(--theme-primary)]" />
                 <h3 class="text-lg text-gray-700 font-semibold dark:text-gray-200">
                   QQ 好友自动同步
                 </h3>
                 <button
-                  class="farm-badge cursor-pointer rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700 transition dark:bg-amber-900/30 hover:bg-amber-200 dark:text-amber-400 dark:hover:bg-amber-900/50"
+                  class="farm-badge cursor-pointer rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700 transition dark:bg-blue-900/30 hover:bg-blue-200 dark:text-blue-300 dark:hover:bg-blue-900/50"
                   @click="openGidListModal"
                 >
                   {{ knownFriendGidCount }}
@@ -653,7 +672,7 @@ async function handleBatchAddKnownFriendGids() {
             </div>
             <div class="flex shrink-0 gap-2">
               <button
-                class="cartoon-btn rounded-xl bg-amber-100 px-3 py-1.5 text-sm text-amber-700 transition dark:bg-amber-900/30 hover:bg-amber-200 dark:text-amber-400 disabled:opacity-50 dark:hover:bg-amber-900/50"
+                class="cartoon-btn rounded-xl bg-slate-100 px-3 py-1.5 text-sm text-slate-700 transition dark:bg-slate-800 hover:bg-slate-200 dark:text-slate-300 disabled:opacity-50 dark:hover:bg-slate-700"
                 :disabled="knownFriendSettingsLoading"
                 @click="currentAccountId && friendStore.fetchKnownFriendSettings(currentAccountId)"
               >
@@ -661,7 +680,7 @@ async function handleBatchAddKnownFriendGids() {
                 刷新
               </button>
               <button
-                class="cartoon-btn rounded-xl bg-green-100 px-3 py-1.5 text-sm text-green-700 transition dark:bg-green-900/30 hover:bg-green-200 dark:text-green-400 disabled:opacity-50 dark:hover:bg-green-900/50"
+                class="cartoon-btn rounded-xl bg-blue-100 px-3 py-1.5 text-sm text-blue-700 transition dark:bg-blue-900/30 hover:bg-blue-200 dark:text-blue-300 disabled:opacity-50 dark:hover:bg-blue-900/50"
                 :disabled="knownFriendSettingsSaving"
                 @click="handleSaveKnownFriendSettings"
               >
@@ -697,7 +716,7 @@ async function handleBatchAddKnownFriendGids() {
           </div>
         </div>
 
-        <div v-if="friends.length === 0" class="farm-card rounded-2xl bg-white p-8 text-center text-gray-500 shadow-md dark:bg-gray-800">
+        <div v-if="friends.length === 0" class="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] p-8 text-center text-gray-500">
           暂无好友或数据加载失败
         </div>
 
@@ -714,18 +733,20 @@ async function handleBatchAddKnownFriendGids() {
             </ElButton>
           </div>
 
-          <div
-            v-for="friend in paginatedFriends"
-            :key="friend.gid"
-            class="friend-card"
-          >
-            <div
-              class="friend-card__header"
-              :class="blacklistGidSet.has(Number(friend.gid)) ? 'friend-card__header--muted' : ''"
-              @click="toggleFriend(friend.gid)"
-            >
-              <div class="flex items-center gap-3">
-                <div class="h-10 w-10 flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-200 ring-1 ring-gray-100 dark:bg-gray-600 dark:ring-gray-700">
+          <div class="friend-workbench">
+            <ElScrollbar class="friend-list-pane" role="listbox" aria-label="好友列表">
+              <button
+                v-for="friend in paginatedFriends"
+                :key="friend.gid"
+                class="friend-list-item"
+                :class="[
+                  String(friend.gid) === selectedFriendKey ? 'friend-list-item--active' : '',
+                  blacklistGidSet.has(Number(friend.gid)) ? 'friend-list-item--muted' : '',
+                ]"
+                type="button"
+                @click="selectFriend(friend.gid)"
+              >
+                <div class="h-9 w-9 flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-200 ring-1 ring-gray-100 dark:bg-gray-600 dark:ring-gray-700">
                   <img
                     v-if="canShowFriendAvatar(friend)"
                     :src="getFriendAvatar(friend)"
@@ -733,96 +754,116 @@ async function handleBatchAddKnownFriendGids() {
                     loading="lazy"
                     @error="handleFriendAvatarError(friend)"
                   >
-                  <span v-else class="text-gray-400">👤</span>
+                  <span v-else class="i-carbon-user-avatar text-gray-400" />
                 </div>
-                <div>
-                  <div class="flex items-center gap-2 font-bold">
-                    {{ friend.name }} ({{ friend.gid }})
-
-                    <span v-if="blacklistGidSet.has(Number(friend.gid))" class="rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-500 dark:bg-gray-700 dark:text-gray-400">已屏蔽</span>
+                <div class="min-w-0 flex-1 text-left">
+                  <div class="flex items-center gap-2">
+                    <span class="truncate text-sm text-[var(--theme-text)] font-semibold">
+                      {{ friend.name || `GID:${friend.gid}` }}
+                    </span>
+                    <span v-if="blacklistGidSet.has(Number(friend.gid))" class="shrink-0 rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-500 dark:bg-gray-700 dark:text-gray-400">已屏蔽</span>
                   </div>
-                  <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
-                    <span
-                      v-if="getFriendLevel(friend) > 0"
-                      class="rounded bg-gray-100 px-1.5 py-0.5 text-gray-500 dark:bg-gray-700 dark:text-gray-300"
-                    >
+                  <div class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--theme-text-muted)]">
+                    <span>GID {{ friend.gid }}</span>
+                    <span v-if="getFriendLevel(friend) > 0" class="rounded bg-[var(--theme-surface-soft)] px-1.5 py-0.5">
                       Lv.{{ getFriendLevel(friend) }}
                     </span>
-                    <span
-                      v-if="getFriendGold(friend) > 0"
-                      class="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
-                    >
-                      金币 {{ formatFriendGold(friend.gold) }}
+                    <span v-if="getFriendGold(friend) > 0" class="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
+                      {{ formatFriendGold(friend.gold) }}
                     </span>
-                  </div>
-                  <div class="text-sm" :class="getFriendStatusText(friend) !== '无操作' ? 'text-green-500 font-medium' : 'text-gray-400'">
-                    <span v-if="getFriendStatusText(friend) !== '无操作'" class="farm-badge inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs text-green-600 dark:bg-green-900/20 dark:text-green-400">
-                      {{ getFriendStatusText(friend) }}
-                    </span>
-                    <span v-else>{{ getFriendStatusText(friend) }}</span>
                   </div>
                 </div>
-              </div>
+                <span class="i-carbon-chevron-right shrink-0 text-sm text-[var(--theme-text-muted)]" />
+              </button>
+            </ElScrollbar>
 
-              <div class="friend-card__actions">
-                <ElButton
-                  size="small"
-                  type="primary"
-                  plain
-                  @click="handleOp(friend.gid, 'steal', $event)"
-                >
-                  偷取
-                </ElButton>
-                <ElButton
-                  size="small"
-                  type="success"
-                  plain
-                  @click="handleOp(friend.gid, 'farming', $event)"
-                >
-                  一键务农
-                </ElButton>
-                <ElButton
-                  size="small"
-                  type="danger"
-                  plain
-                  @click="handleOp(friend.gid, 'bad', $event)"
-                >
-                  捣乱
-                </ElButton>
-                <ElButton
-                  size="small"
-                  plain
-                  @click="handleToggleBlacklist(friend, $event)"
-                >
-                  {{ blacklistGidSet.has(Number(friend.gid)) ? '移出黑名单' : '加入黑名单' }}
-                </ElButton>
-                <ElButton
-                  v-if="isQqAccount && knownFriendGidSet.has(Number(friend.gid))"
-                  size="small"
-                  type="warning"
-                  plain
-                  @click="handleRemoveKnownFriendGid(friend, $event)"
-                >
-                  移出同步列表
-                </ElButton>
-              </div>
-            </div>
+            <ElScrollbar class="friend-detail-pane">
+              <template v-if="selectedFriend">
+                <div class="friend-detail-header">
+                  <div class="h-12 w-12 flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-200 ring-1 ring-gray-100 dark:bg-gray-600 dark:ring-gray-700">
+                    <img
+                      v-if="canShowFriendAvatar(selectedFriend)"
+                      :src="getFriendAvatar(selectedFriend)"
+                      class="h-full w-full object-cover"
+                      loading="lazy"
+                      @error="handleFriendAvatarError(selectedFriend)"
+                    >
+                    <span v-else class="i-carbon-user-avatar text-xl text-gray-400" />
+                  </div>
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <h3 class="truncate text-lg text-[var(--theme-text)] font-semibold">
+                        {{ selectedFriend.name || `GID:${selectedFriend.gid}` }}
+                      </h3>
+                      <span v-if="blacklistGidSet.has(Number(selectedFriend.gid))" class="rounded bg-gray-200 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-700 dark:text-gray-400">已屏蔽</span>
+                    </div>
+                    <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--theme-text-muted)]">
+                      <span>GID {{ selectedFriend.gid }}</span>
+                      <span v-if="getFriendLevel(selectedFriend) > 0">Lv.{{ getFriendLevel(selectedFriend) }}</span>
+                      <span v-if="getFriendGold(selectedFriend) > 0">金币 {{ formatFriendGold(selectedFriend.gold) }}</span>
+                    </div>
+                  </div>
+                </div>
 
-            <div v-if="expandedFriends.has(friend.gid)" class="friend-land-panel">
-              <div v-if="friendLandsLoading[friend.gid]" class="flex justify-center py-4">
-                <div class="i-svg-spinners-90-ring-with-bg text-2xl text-blue-500" />
+                <div class="friend-detail-actions">
+                  <ElButton size="small" type="primary" plain @click="handleOp(selectedFriend.gid, 'steal', $event)">
+                    偷取
+                  </ElButton>
+                  <ElButton size="small" type="success" plain @click="handleOp(selectedFriend.gid, 'farming', $event)">
+                    一键务农
+                  </ElButton>
+                  <ElButton size="small" type="danger" plain @click="handleOp(selectedFriend.gid, 'bad', $event)">
+                    捣乱
+                  </ElButton>
+                  <ElButton size="small" plain @click="handleToggleBlacklist(selectedFriend, $event)">
+                    {{ blacklistGidSet.has(Number(selectedFriend.gid)) ? '移出黑名单' : '加入黑名单' }}
+                  </ElButton>
+                  <ElButton
+                    v-if="isQqAccount && knownFriendGidSet.has(Number(selectedFriend.gid))"
+                    size="small"
+                    type="warning"
+                    plain
+                    @click="handleRemoveKnownFriendGid(selectedFriend, $event)"
+                  >
+                    移出同步列表
+                  </ElButton>
+                </div>
+
+                <div class="friend-detail-status">
+                  <span class="i-carbon-information text-[var(--theme-primary)]" />
+                  <span :class="getFriendStatusText(selectedFriend) !== '无操作' ? 'text-teal-600 font-medium dark:text-teal-300' : 'text-[var(--theme-text-muted)]'">
+                    {{ getFriendStatusText(selectedFriend) }}
+                  </span>
+                </div>
+
+                <div class="friend-land-panel friend-land-panel--detail">
+                  <div class="mb-3 flex items-center justify-between">
+                    <h4 class="text-sm text-[var(--theme-text)] font-semibold">
+                      土地状态
+                    </h4>
+                    <ElButton   :loading="friendLandsLoading[selectedFriendKey]" @click="selectFriend(selectedFriend.gid)">
+                      刷新土地
+                    </ElButton>
+                  </div>
+                  <div v-if="friendLandsLoading[selectedFriendKey]" class="flex justify-center py-8">
+                    <div class="i-svg-spinners-90-ring-with-bg text-2xl text-[var(--theme-primary)]" />
+                  </div>
+                  <div v-else-if="!friendLands[selectedFriendKey] || friendLands[selectedFriendKey]?.length === 0" class="py-8 text-center text-sm text-[var(--theme-text-muted)]">
+                    无土地数据
+                  </div>
+                  <div v-else class="friend-land-grid">
+                    <LandCard
+                      v-for="land in friendLands[selectedFriendKey]"
+                      :key="land.id"
+                      :land="land"
+                    />
+                  </div>
+                </div>
+              </template>
+              <div v-else class="py-12 text-center text-sm text-[var(--theme-text-muted)]">
+                请选择好友查看土地状态
               </div>
-              <div v-else-if="!friendLands[friend.gid] || friendLands[friend.gid]?.length === 0" class="py-4 text-center text-gray-500">
-                无土地数据
-              </div>
-              <div v-else class="friend-land-grid">
-                <LandCard
-                  v-for="land in friendLands[friend.gid]"
-                  :key="land.id"
-                  :land="land"
-                />
-              </div>
-            </div>
+            </ElScrollbar>
           </div>
 
           <!-- 分页控件 -->
@@ -881,28 +922,31 @@ async function handleBatchAddKnownFriendGids() {
         </template>
       </div>
 
-      <div v-else-if="activeTab === 'blacklist'" class="space-y-4">
-        <div class="farm-card rounded-2xl bg-white p-4 shadow-md dark:bg-gray-800">
-          <p class="text-sm text-gray-500 dark:text-gray-400">
-            加入黑名单的好友在自动偷菜和帮助时会被跳过。
-          </p>
+      <div v-else-if="activeTab === 'blacklist'" class="data-workspace">
+        <div class="data-note">
+          <span class="i-carbon-information text-[var(--theme-primary)]" />
+          <span>加入黑名单的好友在自动偷菜和帮助时会被跳过。</span>
         </div>
 
-        <div v-if="blacklist.length === 0" class="farm-card rounded-2xl bg-white p-8 text-center text-gray-500 shadow-md dark:bg-gray-800">
-          <div class="mx-auto mb-3 text-4xl text-gray-300">
-            🚫
+        <div v-if="blacklist.length === 0" class="data-empty">
+          <span class="i-carbon-warning-alt text-2xl text-gray-300" />
+          <span>暂无黑名单好友</span>
+        </div>
+
+        <div v-else class="record-list-panel">
+          <div class="record-list-head">
+            <span>好友</span>
+            <span>保护状态</span>
+            <span>GID</span>
+            <span class="text-right">操作</span>
           </div>
-          暂无黑名单好友
-        </div>
-
-        <div v-else class="space-y-2">
           <div
             v-for="item in blacklist"
             :key="item.gid"
-            class="flex items-center justify-between cartoon-card rounded-2xl bg-white p-4 shadow-md dark:bg-gray-800"
+            class="record-row blacklist-row"
           >
-            <div class="flex items-center gap-3">
-              <div class="h-10 w-10 flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-200 ring-1 ring-gray-100 dark:bg-gray-600 dark:ring-gray-700">
+            <div class="record-person">
+              <div class="record-avatar">
                 <img
                   v-if="item.avatarUrl"
                   :src="item.avatarUrl"
@@ -910,101 +954,109 @@ async function handleBatchAddKnownFriendGids() {
                   loading="lazy"
                   @error="($event.target as HTMLImageElement).style.display = 'none'"
                 >
-                <span v-else class="text-gray-400">👤</span>
+                <span v-else class="i-carbon-user text-gray-400" />
               </div>
-              <div>
-                <span class="font-medium">{{ item.name || `GID:${item.gid}` }}</span>
-                <span class="ml-2 text-sm text-gray-400">({{ item.gid }})</span>
+              <div class="min-w-0">
+                <div class="truncate text-sm text-[var(--theme-text)] font-semibold">
+                  {{ item.name || `GID:${item.gid}` }}
+                </div>
+                <div class="text-xs text-[var(--theme-text-muted)]">
+                  自动偷菜和帮助时跳过
+                </div>
               </div>
             </div>
-            <button
-              class="cartoon-btn rounded-xl bg-red-100 px-3 py-1.5 text-sm text-red-600 dark:bg-red-900/30 hover:bg-red-200 dark:text-red-400 dark:hover:bg-red-900/50"
-              @click="handleRemoveFromBlacklist(item.gid)"
-            >
-              移出黑名单
-            </button>
+            <div class="record-tag-cell">
+              <span class="record-soft-tag record-soft-tag--gray">黑名单保护</span>
+            </div>
+            <div class="record-mono">
+              {{ item.gid }}
+            </div>
+            <div class="record-action">
+              <button class="record-link-danger" @click="handleRemoveFromBlacklist(item.gid)">
+                移出
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      <div v-else-if="activeTab === 'visitors'" class="space-y-4">
-        <div class="flex flex-wrap items-center gap-2">
-          <button
-            v-for="item in interactFilters"
-            :key="item.key"
-            class="cartoon-btn rounded-full px-3 py-1 text-xs transition"
-            :class="interactFilter === item.key
-              ? 'text-white'
-              : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'"
-            :style="interactFilter === item.key ? { backgroundColor: 'var(--theme-primary)' } : {}"
-            @click="interactFilter = item.key"
-          >
-            {{ item.label }}
-          </button>
-          <button
-            class="cartoon-btn rounded-xl bg-gray-100 px-3 py-1.5 text-xs text-gray-600 transition disabled:cursor-not-allowed dark:bg-gray-700 hover:bg-gray-200 dark:text-gray-300 disabled:opacity-60 dark:hover:bg-gray-600"
-            :disabled="interactLoading"
+      <div v-else-if="activeTab === 'visitors'" class="data-workspace">
+        <div class="interact-filter-toolbar">
+          <ElRadioGroup v-model="interactFilter" >
+            <ElRadioButton
+              v-for="item in interactFilters"
+              :key="item.key"
+              :value="item.key"
+            >
+              {{ item.label }}
+            </ElRadioButton>
+          </ElRadioGroup>
+          <ElButton
+            :loading="interactLoading"
             @click="refreshInteractRecords"
           >
-            {{ interactLoading ? '刷新中...' : '刷新' }}
-          </button>
+            刷新
+          </ElButton>
         </div>
 
         <div v-if="!!interactError" class="rounded-lg bg-red-50 px-4 py-6 text-center text-sm text-red-600 dark:bg-red-900/20 dark:text-red-300">
           {{ interactError }}
         </div>
 
-        <div v-else-if="visibleInteractRecords.length === 0" class="farm-card rounded-2xl bg-white p-8 text-center text-gray-500 shadow-md dark:bg-gray-800">
-          <div class="mx-auto mb-3 text-4xl text-gray-300">
-            👀
-          </div>
-          暂无访客记录
+        <div v-else-if="visibleInteractRecords.length === 0" class="data-empty">
+          <span class="i-carbon-view text-2xl text-gray-300" />
+          <span>暂无访客记录</span>
         </div>
 
-        <div v-else class="space-y-3">
+        <div v-else class="record-list-panel visitors-record-panel">
+          <div class="record-list-head visitors-record-head">
+            <span>访客</span>
+            <span>行为</span>
+            <span>等级</span>
+            <span>详情</span>
+            <span class="text-right">时间</span>
+          </div>
           <div
             v-for="record in visibleInteractRecords"
             :key="record.key"
-            class="flex items-start gap-3 cartoon-card rounded-2xl bg-white p-4 shadow-md dark:bg-gray-800"
+            class="record-row visitor-row"
           >
-            <div class="h-12 w-12 flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-200 ring-1 ring-gray-100 dark:bg-gray-700 dark:ring-gray-600">
-              <img
-                v-if="canShowInteractAvatar(record)"
-                :src="getInteractAvatar(record)"
-                class="h-full w-full object-cover"
-                loading="lazy"
-                @error="handleInteractAvatarError(record)"
-              >
-              <span v-else class="text-xl text-gray-400">👤</span>
-            </div>
-            <div class="min-w-0 flex-1">
-              <div class="mb-1 flex flex-wrap items-center gap-2">
-                <span class="max-w-full truncate text-base text-gray-800 font-medium dark:text-gray-100">
-                  {{ record.nick || `GID:${record.visitorGid}` }}
-                </span>
-                <span
-                  class="rounded-full px-2 py-0.5 text-xs font-medium"
-                  :class="getInteractBadgeClass(record.actionType)"
+            <div class="record-person">
+              <div class="record-avatar">
+                <img
+                  v-if="canShowInteractAvatar(record)"
+                  :src="getInteractAvatar(record)"
+                  class="h-full w-full object-cover"
+                  loading="lazy"
+                  @error="handleInteractAvatarError(record)"
                 >
-                  {{ record.actionLabel }}
-                </span>
-                <span v-if="record.level" class="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-700 dark:text-gray-300">
-                  Lv.{{ record.level }}
-                </span>
-                <span v-if="record.visitorGid" class="text-xs text-gray-400">
-                  GID {{ record.visitorGid }}
-                </span>
+                <span v-else class="i-carbon-user text-gray-400" />
               </div>
-              <div class="text-sm text-gray-600 dark:text-gray-300">
-                {{ record.actionDetail || record.actionLabel }}
+              <div class="min-w-0">
+                <div class="truncate text-sm text-[var(--theme-text)] font-semibold">
+                  {{ record.nick || `GID:${record.visitorGid}` }}
+                </div>
+                <div class="text-xs text-[var(--theme-text-muted)]">
+                  GID {{ record.visitorGid || '--' }}
+                </div>
               </div>
             </div>
-            <div class="shrink-0 text-right text-xs text-gray-400">
+            <div class="record-tag-cell">
+              <span class="record-soft-tag" :class="getInteractBadgeClass(record.actionType)">
+                {{ record.actionLabel }}
+              </span>
+            </div>
+            <div class="record-mono">
+              {{ record.level ? `Lv.${record.level}` : '--' }}
+            </div>
+            <div class="record-detail">
+              {{ record.actionDetail || record.actionLabel }}
+            </div>
+            <div class="record-time">
               {{ formatInteractTime(record.serverTimeMs) }}
             </div>
           </div>
-
-          <div v-if="filteredInteractRecords.length > visibleInteractRecords.length" class="text-center text-xs text-gray-400">
+          <div v-if="filteredInteractRecords.length > visibleInteractRecords.length" class="data-table-footer">
             仅展示最近 {{ visibleInteractRecords.length }} 条
           </div>
         </div>
@@ -1147,82 +1199,421 @@ async function handleBatchAddKnownFriendGids() {
 
 <style scoped>
 .friend-toolbar {
+  display: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+}
+
+.friends-page {
+  min-height: 0;
+  height: calc(100dvh - 72px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.friends-workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.interact-filter-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 12px 14px;
-  border: 1px solid var(--theme-border);
-  border-radius: var(--theme-radius-lg);
-  background: var(--theme-surface);
-  box-shadow: var(--theme-shadow-soft);
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--theme-border);
 }
 
-.friend-card {
+.friend-workbench {
+  display: grid;
+  grid-template-columns: minmax(270px, 340px) minmax(0, 1fr);
+  flex: 1;
+  height: auto;
+  min-height: 0;
   overflow: hidden;
   border: 1px solid var(--theme-border);
-  border-radius: var(--theme-radius-lg);
+  border-radius: var(--theme-radius-md);
   background: var(--theme-surface);
-  box-shadow: var(--theme-shadow-soft);
 }
 
-.friend-card__header {
+.friend-list-pane {
+  height: 100%;
+  min-height: 0;
+  border-right: 1px solid var(--theme-border);
+  background: var(--theme-surface-soft);
+}
+
+.friend-list-pane :deep(.el-scrollbar__view) {
+  padding: 0;
+}
+
+.friend-list-item {
+  width: 100%;
+  min-height: 56px;
   display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--theme-border);
+  border-radius: 0;
+  background: transparent;
+  padding: 8px 12px 8px 10px;
+  color: inherit;
   cursor: pointer;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px;
   transition:
     background-color var(--theme-duration-fast),
+    border-color var(--theme-duration-fast),
     opacity var(--theme-duration-fast);
 }
 
-.friend-card__header:hover {
-  background: var(--theme-surface-soft);
+.friend-list-item:hover {
+  background: color-mix(in srgb, var(--theme-surface) 72%, var(--theme-surface-soft));
 }
 
-.friend-card__header--muted {
-  opacity: 0.56;
+.friend-list-item--active {
+  border-left-color: var(--theme-primary);
+  background: var(--theme-surface);
 }
 
-.friend-card__actions {
+.friend-list-item--muted {
+  opacity: 0.62;
+}
+
+.friend-detail-pane {
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.friend-detail-pane :deep(.el-scrollbar__view) {
+  padding: 12px 16px;
+}
+
+.friend-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.friend-detail-actions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-start;
   gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--theme-border);
 }
 
-.friend-card__actions :deep(.el-button) {
+.friend-detail-actions :deep(.el-button) {
   margin-left: 0;
 }
 
+.friend-detail-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  border-bottom: 1px solid var(--theme-border);
+  background: transparent;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
 .friend-land-panel {
-  padding: 16px;
+  padding: 10px 0 0;
   border-top: 1px solid var(--theme-border);
-  background: var(--theme-surface-soft);
+  background: transparent;
+}
+
+.friend-land-panel--detail {
+  border: 0;
+  border-radius: 0;
 }
 
 .friend-land-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
 }
 
-@media (min-width: 640px) {
-  .friend-card__header {
-    flex-direction: row;
-    align-items: center;
-  }
+.friend-land-panel--detail :deep(.land-card) {
+  min-height: 136px;
+  border-radius: 6px;
+  box-shadow: none;
+}
 
-  .friend-card__actions {
-    justify-content: flex-end;
-  }
+.friend-land-panel--detail :deep(.land-card__header) {
+  padding: 8px 10px 0;
+}
+
+.friend-land-panel--detail :deep(.land-card__topline) {
+  height: 2px;
+}
+
+.friend-land-panel--detail :deep(.land-card__body) {
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.friend-land-panel--detail :deep(.plant-preview) {
+  width: 46px;
+  height: 46px;
+  border-radius: 6px;
+}
+
+.friend-land-panel--detail :deep(.plant-image) {
+  max-width: 36px;
+  max-height: 36px;
+}
+
+.friend-land-panel--detail :deep(.plant-name) {
+  font-size: 13px;
+}
+
+.friend-land-panel--detail :deep(.plant-meta),
+.friend-land-panel--detail :deep(.progress-row) {
+  font-size: 12px;
+}
+
+.friend-land-panel--detail :deep(.land-progress) {
+  padding: 0 10px 8px;
+}
+
+.friend-land-panel--detail :deep(.land-card__footer) {
+  display: none;
+}
+
+.compact-list-row {
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
+  background: var(--theme-surface);
+  padding: 12px 14px;
+  box-shadow: none;
+  transition: background-color var(--theme-duration-fast);
+}
+
+.compact-list-row:hover {
+  background: var(--theme-surface-soft);
+}
+
+.data-workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.data-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--theme-border);
+  padding: 0 0 10px;
+  color: var(--theme-text-muted);
+  font-size: 13px;
+}
+
+.data-empty {
+  flex: 1;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed var(--theme-border);
+  border-radius: var(--theme-radius-md);
+  color: var(--theme-text-muted);
+  background: color-mix(in srgb, var(--theme-surface) 72%, transparent);
+}
+
+.record-list-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
+  background: var(--theme-surface);
+}
+
+.record-list-head,
+.record-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(120px, 0.6fr) minmax(120px, 0.6fr) minmax(88px, 0.4fr);
+  align-items: center;
+  column-gap: 16px;
+}
+
+.visitors-record-head,
+.visitor-row {
+  grid-template-columns: minmax(220px, 1.25fr) minmax(110px, 0.55fr) minmax(80px, 0.35fr) minmax(260px, 1fr) minmax(100px, 0.45fr);
+}
+
+.record-list-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 1px solid var(--theme-border);
+  background: var(--theme-surface-soft);
+  padding: 10px 14px;
+  color: var(--theme-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.record-row {
+  min-height: 56px;
+  border-bottom: 1px solid var(--theme-border);
+  padding: 10px 14px;
+  transition: background-color var(--theme-duration-fast);
+}
+
+.record-row:hover {
+  background: var(--theme-surface-soft);
+}
+
+.record-row:last-child {
+  border-bottom: 0;
+}
+
+.record-person {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.record-avatar {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--theme-border);
+  border-radius: 50%;
+  background: var(--theme-surface-soft);
+}
+
+.record-tag-cell {
+  min-width: 0;
+}
+
+.record-soft-tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.record-soft-tag--gray {
+  background: color-mix(in srgb, var(--theme-text-muted) 12%, transparent);
+  color: var(--theme-text-muted);
+}
+
+.record-mono {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--theme-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-detail {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--theme-text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-time,
+.record-action {
+  color: var(--theme-text-muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+.record-link-danger {
+  border: 0;
+  background: transparent;
+  color: #dc2626;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.record-link-danger:hover {
+  color: #b91c1c;
+}
+
+.data-table-footer {
+  border-top: 1px solid var(--theme-border);
+  padding: 8px 12px;
+  color: var(--theme-text-muted);
+  font-size: 12px;
+  text-align: center;
 }
 
 @media (max-width: 640px) {
+  .friend-workbench {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+
+  .friend-list-pane {
+    max-height: 320px;
+    height: 320px;
+    border-right: 0;
+    border-bottom: 1px solid var(--theme-border);
+  }
+
+  .friend-detail-pane :deep(.el-scrollbar__view) {
+    padding: 12px;
+  }
+
+  .friend-detail-pane {
+    height: auto;
+  }
+
   .friend-land-grid {
     grid-template-columns: 1fr;
+  }
+
+  .record-list-head {
+    display: none;
+  }
+
+  .record-row,
+  .visitor-row {
+    grid-template-columns: 1fr;
+    row-gap: 8px;
+  }
+
+  .record-time,
+  .record-action {
+    text-align: left;
   }
 }
 </style>
