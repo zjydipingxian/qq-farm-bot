@@ -4,134 +4,125 @@ import api from '@/api'
 
 const THEME_KEY = 'ui_theme'
 
-export type Theme = 'light-blue' | 'light-green' | 'light-pink' | 'dark-blue' | 'dark-purple' | 'dark-teal' | 'dark-orange' | 'dark-red' | 'farm-light' | 'farm-dark'
+export type Theme = 'light' | 'dark'
+
+interface ThemeTokens {
+  isDark: boolean
+  bg: string
+  page: string
+  surface: string
+  surfaceSoft: string
+  text: string
+  textMuted: string
+  border: string
+  primary: string
+  primarySoft: string
+  secondary: string
+  success: string
+  warning: string
+  danger: string
+  gradient: string
+}
+
+const themeTokens: Record<Theme, ThemeTokens> = {
+  light: {
+    isDark: false,
+    bg: '#f7f8fa',
+    page: '#f2f3f5',
+    surface: '#ffffff',
+    surfaceSoft: '#f7f8fa',
+    text: '#1f2329',
+    textMuted: '#646a73',
+    border: '#dee0e3',
+    primary: '#3370ff',
+    primarySoft: '#e8efff',
+    secondary: '#7b67ee',
+    success: '#2ea121',
+    warning: '#f54a45',
+    danger: '#f54a45',
+    gradient: 'linear-gradient(135deg, #3370ff 0%, #7b67ee 100%)',
+  },
+  dark: {
+    isDark: true,
+    bg: '#101319',
+    page: '#171a22',
+    surface: '#1f2430',
+    surfaceSoft: '#252b38',
+    text: '#f2f3f5',
+    textMuted: '#a8abb2',
+    border: '#333948',
+    primary: '#5b8cff',
+    primarySoft: '#25365f',
+    secondary: '#9b8cff',
+    success: '#4cc05f',
+    warning: '#ff9c40',
+    danger: '#ff6b66',
+    gradient: 'linear-gradient(135deg, #5b8cff 0%, #9b8cff 100%)',
+  },
+}
+
+function normalizeTheme(theme: unknown): Theme {
+  return theme === 'dark' ? 'dark' : 'light'
+}
+
+function applyCssTokens(theme: Theme) {
+  if (typeof document === 'undefined')
+    return
+
+  const root = document.documentElement
+  const t = themeTokens[theme]
+
+  root.classList.toggle('dark', t.isDark)
+  root.style.colorScheme = t.isDark ? 'dark' : 'light'
+
+  root.style.setProperty('--theme-bg', t.bg)
+  root.style.setProperty('--theme-page', t.page)
+  root.style.setProperty('--theme-surface', t.surface)
+  root.style.setProperty('--theme-surface-soft', t.surfaceSoft)
+  root.style.setProperty('--theme-text', t.text)
+  root.style.setProperty('--theme-text-muted', t.textMuted)
+  root.style.setProperty('--theme-border', t.border)
+  root.style.setProperty('--theme-primary', t.primary)
+  root.style.setProperty('--theme-primary-soft', t.primarySoft)
+  root.style.setProperty('--theme-secondary', t.secondary)
+  root.style.setProperty('--theme-success', t.success)
+  root.style.setProperty('--theme-warning', t.warning)
+  root.style.setProperty('--theme-danger', t.danger)
+  root.style.setProperty('--theme-gradient', t.gradient)
+
+  root.style.setProperty('--theme-radius-sm', '3px')
+  root.style.setProperty('--theme-radius-md', '4px')
+  root.style.setProperty('--theme-radius-lg', '6px')
+  root.style.setProperty('--theme-radius-xl', '8px')
+  root.style.setProperty('--theme-shadow-sm', '0 1px 2px rgba(31, 35, 41, 0.04)')
+  root.style.setProperty('--theme-shadow-md', '0 4px 16px rgba(31, 35, 41, 0.06)')
+  root.style.setProperty('--theme-shadow-lg', '0 8px 28px rgba(31, 35, 41, 0.1)')
+
+  root.style.setProperty('--el-color-primary', t.primary)
+  root.style.setProperty('--el-color-success', t.success)
+  root.style.setProperty('--el-color-warning', t.warning)
+  root.style.setProperty('--el-color-danger', t.danger)
+  root.style.setProperty('--el-bg-color', t.surface)
+  root.style.setProperty('--el-bg-color-page', t.page)
+  root.style.setProperty('--el-bg-color-overlay', t.surface)
+  root.style.setProperty('--el-text-color-primary', t.text)
+  root.style.setProperty('--el-text-color-regular', t.text)
+  root.style.setProperty('--el-text-color-secondary', t.textMuted)
+  root.style.setProperty('--el-border-color', t.border)
+  root.style.setProperty('--el-border-color-light', t.border)
+  root.style.setProperty('--el-fill-color-blank', t.surface)
+  root.style.setProperty('--el-fill-color-light', t.surfaceSoft)
+  root.style.setProperty('--el-border-radius-base', '4px')
+}
 
 export const useAppStore = defineStore('app', () => {
   const sidebarOpen = ref(false)
-  const currentTheme = ref<Theme>((localStorage.getItem(THEME_KEY) as Theme) || 'farm-light')
-  const showThemePanel = ref(false)
+  const sidebarCollapsed = ref(localStorage.getItem('sidebar_collapsed') === 'true')
+  const currentTheme = ref<Theme>(normalizeTheme(localStorage.getItem(THEME_KEY)))
 
-  const themes: Record<Theme, {
-    name: string
-    isDark: boolean
-    bg: string
-    text: string
-    primary: string
-    secondary: string
-    gradient: string
-    icon: string
-  }> = {
-    // 原始白色主题
-    'light-blue': {
-      name: '白色',
-      isDark: false,
-      bg: '#f9fafb',
-      text: '#1f2937',
-      primary: '#3b82f6',
-      secondary: '#2563eb',
-      gradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-      icon: 'i-carbon-sun',
-    },
-    // 原始黑色主题
-    'dark-blue': {
-      name: '深色',
-      isDark: true,
-      bg: '#111827',
-      text: '#f3f4f6',
-      primary: '#3b82f6',
-      secondary: '#2563eb',
-      gradient: 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%)',
-      icon: 'i-carbon-moon',
-    },
-    // 樱花粉主题
-    'light-pink': {
-      name: '樱花粉',
-      isDark: false,
-      bg: '#fff0f5',
-      text: '#831843',
-      primary: '#ec4899',
-      secondary: '#be185d',
-      gradient: 'linear-gradient(135deg, #f472b6 0%, #ec4899 100%)',
-      icon: 'i-carbon-favorite',
-    },
-    // 清新绿主题
-    'light-green': {
-      name: '清新绿',
-      isDark: false,
-      bg: '#f0fdf4',
-      text: '#14532d',
-      primary: '#22c55e',
-      secondary: '#16a34a',
-      gradient: 'linear-gradient(135deg, #4ade80 0%, #22c55e 100%)',
-      icon: 'i-carbon-leaf',
-    },
-    // 紫罗兰主题
-    'dark-purple': {
-      name: '紫罗兰',
-      isDark: true,
-      bg: '#1e1b4b',
-      text: '#e9d5ff',
-      primary: '#a855f7',
-      secondary: '#9333ea',
-      gradient: 'linear-gradient(135deg, #c084fc 0%, #a855f7 100%)',
-      icon: 'i-carbon-crown',
-    },
-    // 橙色暖阳主题
-    'dark-orange': {
-      name: '暖阳橙',
-      isDark: true,
-      bg: '#292524',
-      text: '#fef3c7',
-      primary: '#f59e0b',
-      secondary: '#d97706',
-      gradient: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
-      icon: 'i-carbon-sun',
-    },
-    // 青色主题
-    'dark-teal': {
-      name: '青空夜',
-      isDark: true,
-      bg: '#134e4a',
-      text: '#ccfbf1',
-      primary: '#06b6d4',
-      secondary: '#0891b2',
-      gradient: 'linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%)',
-      icon: 'i-carbon-tree',
-    },
-    // 绯红主题
-    'dark-red': {
-      name: '绯红夜',
-      isDark: true,
-      bg: '#18181b',
-      text: '#fda4af',
-      primary: '#f43f5e',
-      secondary: '#e11d48',
-      gradient: 'linear-gradient(135deg, #fb7185 0%, #f43f5e 100%)',
-      icon: 'i-carbon-close-filled',
-    },
-    // 田园暖光主题
-    'farm-light': {
-      name: '田园暖光',
-      isDark: false,
-      bg: '#fef9ef',
-      text: '#3d2b1f',
-      primary: '#4a8c3f',
-      secondary: '#8b6914',
-      gradient: 'linear-gradient(135deg, #6dbf5b 0%, #4a8c3f 100%)',
-      icon: 'i-carbon-leaf',
-    },
-    // 星空农场主题
-    'farm-dark': {
-      name: '星空农场',
-      isDark: true,
-      bg: '#1a2e1a',
-      text: '#d4e8d4',
-      primary: '#6dbf5b',
-      secondary: '#f0c040',
-      gradient: 'linear-gradient(135deg, #86efac 0%, #4a8c3f 100%)',
-      icon: 'i-carbon-tree',
-    },
-  }
+  const themes = themeTokens
+
+  const isDark = computed(() => currentTheme.value === 'dark')
 
   function toggleSidebar() {
     sidebarOpen.value = !sidebarOpen.value
@@ -145,109 +136,56 @@ export const useAppStore = defineStore('app', () => {
     sidebarOpen.value = true
   }
 
+  function toggleSidebarCollapsed() {
+    sidebarCollapsed.value = !sidebarCollapsed.value
+    localStorage.setItem('sidebar_collapsed', String(sidebarCollapsed.value))
+  }
+
+  function toggleNavigation() {
+    if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+      toggleSidebarCollapsed()
+      return
+    }
+    toggleSidebar()
+  }
+
   async function fetchTheme() {
-    // 从服务器获取主题设置（可选）
     try {
-      const res = await api.get('/api/settings')
-      if (res.data.ok && res.data.data.ui?.theme) {
-        // 如果服务器有主题设置，可以选择使用
-        // 但优先使用本地存储的主题
-      }
+      await api.get('/api/settings')
     }
     catch {
-      // 未登录时静默失败，使用本地缓存值
+      // Settings may be unavailable before login; local theme remains authoritative.
     }
   }
 
   function applyTheme(theme: Theme) {
-    // Validate theme
-    if (!themes[theme]) {
-      theme = 'light-pink'
-    }
+    currentTheme.value = normalizeTheme(theme)
+    localStorage.setItem(THEME_KEY, currentTheme.value)
+    applyCssTokens(currentTheme.value)
+  }
 
-    const t = themes[theme]
-    currentTheme.value = theme
-    localStorage.setItem(THEME_KEY, theme)
-
-    // Apply theme colors to CSS variables
-    if (typeof document !== 'undefined' && document.documentElement) {
-      document.documentElement.style.setProperty('--theme-bg', t.bg)
-      document.documentElement.style.setProperty('--theme-text', t.text)
-      document.documentElement.style.setProperty('--theme-primary', t.primary)
-      document.documentElement.style.setProperty('--theme-secondary', t.secondary)
-      document.documentElement.style.setProperty('--theme-gradient', t.gradient)
-
-      // Farm cartoon style variables — QQ经典农场风格
-      document.documentElement.style.setProperty('--theme-radius-sm', '10px')
-      document.documentElement.style.setProperty('--theme-radius-md', '14px')
-      document.documentElement.style.setProperty('--theme-radius-lg', '18px')
-      document.documentElement.style.setProperty('--theme-radius-xl', '28px')
-      document.documentElement.style.setProperty('--theme-border', '3px solid')
-      document.documentElement.style.setProperty('--theme-shadow-sm', '0 3px 0 rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.08)')
-      document.documentElement.style.setProperty('--theme-shadow-md', '0 4px 0 rgba(0,0,0,0.18), 0 4px 16px rgba(0,0,0,0.12)')
-      document.documentElement.style.setProperty('--theme-shadow-lg', '0 6px 0 rgba(0,0,0,0.2), 0 8px 32px rgba(0,0,0,0.16)')
-      document.documentElement.style.setProperty('--theme-shadow-3d', '0 4px 0 #3a6b2e, 0 6px 12px rgba(0,0,0,0.2)')
-      document.documentElement.style.setProperty('--theme-soil', '#8b6914')
-      document.documentElement.style.setProperty('--theme-soil-dark', '#6b4f0e')
-      document.documentElement.style.setProperty('--theme-grass', '#4a8c3f')
-      document.documentElement.style.setProperty('--theme-grass-light', '#6dbf5b')
-      document.documentElement.style.setProperty('--theme-sky', '#87ceeb')
-      document.documentElement.style.setProperty('--theme-sky-light', '#b8e4f7')
-      document.documentElement.style.setProperty('--theme-wood', '#a16207')
-      document.documentElement.style.setProperty('--theme-wood-dark', '#7a4a05')
-      document.documentElement.style.setProperty('--theme-leaf', '#4a8c3f')
-      document.documentElement.style.setProperty('--theme-flower', '#f472b6')
-      document.documentElement.style.setProperty('--theme-water', '#5bb8f5')
-      document.documentElement.style.setProperty('--theme-sun', '#f0c040')
-      document.documentElement.style.setProperty('--theme-gold', '#f0c040')
-      document.documentElement.style.setProperty('--theme-wheat', '#deb887')
-
-      // Toggle dark class
-      if (t.isDark) {
-        document.documentElement.classList.add('dark')
-      }
-      else {
-        document.documentElement.classList.remove('dark')
-      }
-    }
+  function toggleDark() {
+    applyTheme(isDark.value ? 'light' : 'dark')
   }
 
   function toggleThemePanel() {
-    showThemePanel.value = !showThemePanel.value
+    toggleDark()
   }
 
-  // Legacy toggleDark for backward compatibility
-  function toggleDark() {
-    const current = currentTheme.value
-    if (themes[current]?.isDark) {
-      applyTheme('light-green')
-    }
-    else {
-      applyTheme('light-pink')
-    }
-  }
-
-  // Computed isDark based on currentTheme
-  const isDark = computed(() => themes[currentTheme.value]?.isDark ?? false)
-
-  // Watch theme changes and apply
-  watch(currentTheme, (val) => {
-    applyTheme(val)
-  })
-
-  // Initialize theme immediately (not in onMounted)
-  applyTheme(currentTheme.value)
+  watch(currentTheme, applyCssTokens, { immediate: true })
 
   return {
     sidebarOpen,
+    sidebarCollapsed,
     isDark,
     currentTheme,
-    showThemePanel,
     themes,
     applyTheme,
     toggleThemePanel,
     toggleDark,
     toggleSidebar,
+    toggleSidebarCollapsed,
+    toggleNavigation,
     closeSidebar,
     openSidebar,
     fetchTheme,

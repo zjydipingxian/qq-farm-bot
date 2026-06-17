@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
 import api from '@/api'
-import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseTextarea from '@/components/ui/BaseTextarea.vue'
@@ -95,7 +94,8 @@ const interactionTypeOptions = [
 function handleImageSelect(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
-  if (!file) return
+  if (!file)
+    return
 
   const allowed = ['image/png', 'image/jpeg', 'image/webp']
   if (!allowed.includes(file.type)) {
@@ -183,15 +183,20 @@ async function submit() {
       formData.append('name', form.name.trim())
       formData.append('priceId', form.priceId)
       formData.append('price', form.price)
-      if (form.interactionType) formData.append('interactionType', form.interactionType)
+      if (form.interactionType)
+        formData.append('interactionType', form.interactionType)
       formData.append('canUse', form.canUse)
-      if (form.desc) formData.append('desc', form.desc)
-      if (form.effectDesc) formData.append('effectDesc', form.effectDesc)
+      if (form.desc)
+        formData.append('desc', form.desc)
+      if (form.effectDesc)
+        formData.append('effectDesc', form.effectDesc)
       formData.append('rarity', form.rarity)
       formData.append('maxCount', form.maxCount)
       formData.append('level', form.level)
-      if (form.assetName) formData.append('assetName', form.assetName)
-      if (imageFile.value) formData.append('image', imageFile.value)
+      if (form.assetName)
+        formData.append('assetName', form.assetName)
+      if (imageFile.value)
+        formData.append('image', imageFile.value)
       res = await api.post('/api/config/item', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         skipErrorToast: true,
@@ -263,193 +268,291 @@ watch(() => props.show, (newVal) => {
 </script>
 
 <template>
-  <div v-if="show" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-    <div class="max-h-[90vh] max-w-lg w-full overflow-hidden rounded-2xl" :style="{ background: 'var(--theme-bg)', boxShadow: 'var(--theme-shadow-lg, 0 8px 32px rgba(0,0,0,0.16))' }">
-      <!-- Header -->
-      <div class="flex items-center justify-between p-4" style="border-bottom: 1px solid color-mix(in srgb, var(--theme-text) 10%, transparent)">
-        <h3 class="text-lg font-semibold" style="color: var(--theme-primary, var(--theme-text))">
-          🎒 {{ editData ? '编辑道具' : '道具录入' }}
-        </h3>
-        <BaseButton variant="ghost" class="!p-1" @click="close">
-          <div class="i-carbon-close text-xl" :style="{ color: 'var(--theme-text)' }" />
-        </BaseButton>
+  <ElDialog
+    :model-value="show"
+    :title="editData ? '编辑道具' : '道具录入'"
+    width="640px"
+    append-to-body
+    destroy-on-close
+    @close="close"
+  >
+    <!-- Header -->
+    <div class="hidden">
+      <h3 class="text-lg font-semibold" style="color: var(--theme-primary, var(--theme-text))">
+        🎒 {{ editData ? '编辑道具' : '道具录入' }}
+      </h3>
+      <ElButton text circle @click="close">
+        <div class="i-carbon-close text-xl" :style="{ color: 'var(--theme-text)' }" />
+      </ElButton>
+    </div>
+
+    <div class="config-entry-modal">
+      <!-- 错误信息 -->
+      <div v-if="errorMessage" class="mb-4 rounded-xl p-3 text-sm" style="background: rgba(239, 68, 68, 0.1); color: #ef4444">
+        {{ errorMessage }}
       </div>
 
-      <div class="max-h-[calc(90vh-80px)] overflow-y-auto p-4">
-        <!-- 错误信息 -->
-        <div v-if="errorMessage" class="mb-4 rounded-xl p-3 text-sm" style="background: rgba(239, 68, 68, 0.1); color: #ef4444">
-          {{ errorMessage }}
-        </div>
-
-        <div class="space-y-4">
-          <!-- 基本信息 -->
-          <div class="rounded-xl bg-gray-50 p-3 dark:bg-gray-700/50">
-            <div class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-              📋 基本信息（必填）
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-              <BaseInput
-                v-model="form.id"
-                label="物品ID"
-                placeholder="如: 80009"
-                type="number"
-                class="farm-input"
-                :disabled="!!editData"
-              />
-              <BaseSelect
-                v-model="form.type"
-                label="物品类型"
-                :options="typeOptions"
-                class="farm-input"
-                :disabled="!!editData"
-              />
-              <BaseInput
-                v-model="form.name"
-                label="物品名称"
-                placeholder="如: 超级化肥"
-                class="farm-input col-span-2"
-              />
-            </div>
+      <div class="space-y-4">
+        <!-- 基本信息 -->
+        <section class="modal-section">
+          <div class="mb-2 text-sm text-gray-700 font-medium dark:text-gray-300">
+            📋 基本信息（必填）
           </div>
-
-          <!-- 价格信息 -->
-          <div class="rounded-xl bg-gray-50 p-3 dark:bg-gray-700/50">
-            <div class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-              💰 价格信息
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-              <BaseSelect
-                v-model="form.priceId"
-                label="货币类型"
-                :options="priceIdOptions"
-                class="farm-input"
-              />
-              <BaseInput
-                v-model="form.price"
-                label="价格"
-                placeholder="0"
-                type="number"
-                class="farm-input"
-              />
-            </div>
+          <div class="field-grid">
+            <BaseInput
+              v-model="form.id"
+              label="物品ID"
+              placeholder="如: 80009"
+              type="number"
+              class="farm-input"
+              :disabled="!!editData"
+            />
+            <BaseSelect
+              v-model="form.type"
+              label="物品类型"
+              :options="typeOptions"
+              class="farm-input"
+              :disabled="!!editData"
+            />
+            <BaseInput
+              v-model="form.name"
+              label="物品名称"
+              placeholder="如: 超级化肥"
+              class="col-span-2 farm-input"
+            />
           </div>
+        </section>
 
-          <!-- 属性信息 -->
-          <div class="rounded-xl bg-gray-50 p-3 dark:bg-gray-700/50">
-            <div class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-              ⚙️ 属性信息
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-              <BaseSelect
-                v-model="form.canUse"
-                label="是否可使用"
-                :options="canUseOptions"
-                class="farm-input"
-              />
-              <BaseSelect
-                v-model="form.rarity"
-                label="稀有度"
-                :options="rarityOptions"
-                class="farm-input"
-              />
-              <BaseSelect
-                v-model="form.interactionType"
-                label="交互类型"
-                :options="interactionTypeOptions"
-                class="farm-input"
-              />
-              <BaseInput
-                v-model="form.level"
-                label="等级要求"
-                placeholder="0"
-                type="number"
-                class="farm-input"
-              />
-              <BaseInput
-                v-model="form.maxCount"
-                label="最大堆叠"
-                placeholder="9999"
-                type="number"
-                class="farm-input"
-              />
-              <BaseInput
-                v-model="form.assetName"
-                label="资源标识"
-                placeholder="选填"
-                class="farm-input"
-              />
-            </div>
+        <!-- 价格信息 -->
+        <section class="modal-section">
+          <div class="mb-2 text-sm text-gray-700 font-medium dark:text-gray-300">
+            💰 价格信息
           </div>
-
-          <!-- 描述信息 -->
-          <div class="rounded-xl bg-gray-50 p-3 dark:bg-gray-700/50">
-            <div class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-              📝 描述信息
-            </div>
-            <BaseTextarea
-              v-model="form.desc"
-              label="物品描述"
-              placeholder="物品的详细描述..."
-              :rows="2"
+          <div class="field-grid">
+            <BaseSelect
+              v-model="form.priceId"
+              label="货币类型"
+              :options="priceIdOptions"
               class="farm-input"
             />
-            <div class="mt-3">
-              <BaseInput
-                v-model="form.effectDesc"
-                label="效果描述"
-                placeholder="简短的效果说明"
-                class="farm-input"
-              />
-            </div>
+            <BaseInput
+              v-model="form.price"
+              label="价格"
+              placeholder="0"
+              type="number"
+              class="farm-input"
+            />
           </div>
+        </section>
 
-          <!-- 图片 -->
-          <div class="rounded-xl bg-gray-50 p-3 dark:bg-gray-700/50">
-            <div class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-              🖼️ 物品图片（选填）
-            </div>
-            <div class="flex items-center gap-3">
-              <div
-                v-if="imagePreview"
-                class="relative h-16 w-16 flex shrink-0 items-center justify-center overflow-hidden border border-gray-200 rounded-lg bg-white dark:border-gray-600"
-              >
-                <img :src="imagePreview" class="h-14 w-14 object-contain">
-                <button
-                  class="absolute -right-1 -top-1 h-5 w-5 flex items-center justify-center rounded-full bg-red-500 text-xs text-white"
-                  @click="removeImage"
-                >
-                  ✕
-                </button>
-              </div>
-              <label
-                class="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-gray-300 px-4 py-3 text-sm text-gray-500 transition hover:border-blue-400 hover:text-blue-500 dark:border-gray-600 dark:hover:border-blue-500"
-              >
-                <span class="text-lg">📷</span>
-                <span>{{ imagePreview ? '更换图片' : '选择图片' }}</span>
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  class="hidden"
-                  @change="handleImageSelect"
-                >
-              </label>
-            </div>
-            <div class="mt-1 text-xs text-gray-400">
-              支持 png, jpg, webp 格式，最大 2MB
-            </div>
+        <!-- 属性信息 -->
+        <section class="modal-section">
+          <div class="mb-2 text-sm text-gray-700 font-medium dark:text-gray-300">
+            ⚙️ 属性信息
           </div>
+          <div class="field-grid">
+            <BaseSelect
+              v-model="form.canUse"
+              label="是否可使用"
+              :options="canUseOptions"
+              class="farm-input"
+            />
+            <BaseSelect
+              v-model="form.rarity"
+              label="稀有度"
+              :options="rarityOptions"
+              class="farm-input"
+            />
+            <BaseSelect
+              v-model="form.interactionType"
+              label="交互类型"
+              :options="interactionTypeOptions"
+              class="farm-input"
+            />
+            <BaseInput
+              v-model="form.level"
+              label="等级要求"
+              placeholder="0"
+              type="number"
+              class="farm-input"
+            />
+            <BaseInput
+              v-model="form.maxCount"
+              label="最大堆叠"
+              placeholder="9999"
+              type="number"
+              class="farm-input"
+            />
+            <BaseInput
+              v-model="form.assetName"
+              label="资源标识"
+              placeholder="选填"
+              class="farm-input"
+            />
+          </div>
+        </section>
 
-          <!-- 提交 -->
-          <div class="flex justify-end gap-2 pt-2">
-            <BaseButton variant="outline" class="cartoon-btn" @click="close">
-              取消
-            </BaseButton>
-            <BaseButton variant="primary" class="cartoon-btn" :loading="loading" @click="submit">
-              🎒 {{ editData ? '保存修改' : '录入道具' }}
-            </BaseButton>
+        <!-- 描述信息 -->
+        <section class="modal-section">
+          <div class="mb-2 text-sm text-gray-700 font-medium dark:text-gray-300">
+            📝 描述信息
           </div>
+          <BaseTextarea
+            v-model="form.desc"
+            label="物品描述"
+            placeholder="物品的详细描述..."
+            :rows="2"
+            class="farm-input"
+          />
+          <div class="mt-3">
+            <BaseInput
+              v-model="form.effectDesc"
+              label="效果描述"
+              placeholder="简短的效果说明"
+              class="farm-input"
+            />
+          </div>
+        </section>
+
+        <!-- 图片 -->
+        <section class="modal-section">
+          <div class="mb-2 text-sm text-gray-700 font-medium dark:text-gray-300">
+            🖼️ 物品图片（选填）
+          </div>
+          <div class="flex items-center gap-3">
+            <div
+              v-if="imagePreview"
+              class="relative h-16 w-16 flex shrink-0 items-center justify-center overflow-hidden border border-gray-200 rounded-lg bg-white dark:border-gray-600"
+            >
+              <img :src="imagePreview" class="h-14 w-14 object-contain">
+              <button
+                class="absolute h-5 w-5 flex items-center justify-center rounded-full bg-red-500 text-xs text-white -right-1 -top-1"
+                @click="removeImage"
+              >
+                ✕
+              </button>
+            </div>
+            <label
+              class="flex cursor-pointer items-center gap-2 border border-gray-300 rounded-lg border-dashed px-4 py-3 text-sm text-gray-500 transition dark:border-gray-600 hover:border-blue-400 hover:text-blue-500 dark:hover:border-blue-500"
+            >
+              <span class="text-lg">📷</span>
+              <span>{{ imagePreview ? '更换图片' : '选择图片' }}</span>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                class="hidden"
+                @change="handleImageSelect"
+              >
+            </label>
+          </div>
+          <div class="mt-1 text-xs text-gray-400">
+            支持 png, jpg, webp 格式，最大 2MB
+          </div>
+        </section>
+
+        <!-- 提交 -->
+        <div class="flex justify-end gap-2 pt-2">
+          <ElButton @click="close">
+            取消
+          </ElButton>
+          <ElButton type="primary" :loading="loading" @click="submit">
+            🎒 {{ editData ? '保存修改' : '录入道具' }}
+          </ElButton>
         </div>
       </div>
     </div>
-  </div>
+  </ElDialog>
 </template>
+
+<style scoped>
+.config-entry-modal {
+  max-height: min(68vh, 680px);
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.config-entry-modal :deep(.space-y-4) {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-md);
+  background: var(--theme-surface);
+  padding: 16px;
+}
+
+.modal-section > div:first-child {
+  margin-bottom: 0;
+  color: var(--theme-text);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.config-entry-modal :deep(.farm-input),
+.config-entry-modal :deep(.el-input),
+.config-entry-modal :deep(.el-select) {
+  width: 100%;
+}
+
+.config-entry-modal :deep(.farm-input.base-field),
+.config-entry-modal :deep(.farm-input.base-select),
+.config-entry-modal :deep(.farm-input.base-textarea) {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.config-entry-modal :deep(.base-field__label),
+.config-entry-modal :deep(.base-select__label),
+.config-entry-modal :deep(.base-textarea__label) {
+  color: var(--theme-text-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.config-entry-modal :deep(.el-input__wrapper),
+.config-entry-modal :deep(.el-select__wrapper),
+.config-entry-modal :deep(.el-textarea__inner) {
+  min-height: 36px;
+  border-radius: var(--theme-radius-sm);
+  box-shadow: 0 0 0 1px var(--theme-border) inset;
+}
+
+.config-entry-modal :deep(.col-span-2) {
+  grid-column: 1 / -1;
+}
+
+.config-entry-modal :deep(.el-button) {
+  margin-left: 0;
+}
+
+.config-entry-modal :deep(.flex.justify-end) {
+  position: sticky;
+  bottom: -1px;
+  z-index: 1;
+  margin: 0 -6px -1px;
+  border-top: 1px solid var(--theme-border);
+  background: var(--theme-surface);
+  padding: 12px 6px 0;
+}
+
+@media (max-width: 640px) {
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

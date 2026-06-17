@@ -1,4 +1,4 @@
-export {};
+﻿export {};
 const { createScheduler } = require('../services/scheduler');
 
 interface WorkerManagerOptions {
@@ -131,12 +131,13 @@ function createWorkerManager(options: WorkerManagerOptions) {
 
         child.on('error', (err: any) => {
             log('系统', `账号 ${account.name} 子进程启动失败: ${err && err.message ? err.message : err}`, { accountId: String(account.id), accountName: account.name });
+            
         });
 
         child.on('exit', (code: number, signal: string) => {
             const current = workers[account.id];
             const displayName = (current && current.name) || account.name;
-            log('系统', `账号 ${displayName} 进程退出 (code=${code}, signal=${signal || 'none'})`, {
+            log('系统', `账号 ${displayName} 进程退出(code=${code}, signal=${signal || 'none'})`, {
                 accountId: String(account.id),
                 accountName: displayName,
                 runtimeMode: useThreadRuntime ? 'thread' : 'fork',
@@ -257,7 +258,7 @@ function createWorkerManager(options: WorkerManagerOptions) {
                 if (!worker.autoDeleteTriggered && offlineMs >= autoDeleteMs) {
                     worker.autoDeleteTriggered = true;
                     const offlineMin = Math.floor(offlineMs / 60000);
-                    log('系统', `账号 ${worker.name} 持续离线 ${offlineMin} 分钟，自动删除账号信息`);
+                    log('system', `account ${worker.name} has been offline for ${offlineMin} minutes; deleting account data`);
                     triggerOfflineReminder({
                         accountId,
                         accountName: worker.name,
@@ -309,18 +310,26 @@ function createWorkerManager(options: WorkerManagerOptions) {
                     accountId,
                     worker.name,
                 );
+                triggerOfflineReminder({
+                    accountId,
+                    accountName: worker.name,
+                    username: worker.username,
+                    reason: 'ws_error:400',
+                    offlineMs: 0,
+                });
             }
         } else if (msg.type === 'account_kicked') {
             const reason = msg.reason || '未知';
             log('系统', `账号 ${worker.name} 被踢下线，已自动停止账号`, { accountId: String(accountId), accountName: worker.name });
+            addAccountLog('kickout_stop', `账号 ${worker.name} 被踢下线，已自动停止`, accountId, worker.name, { reason });
+            stopWorker(accountId);
             triggerOfflineReminder({
                 accountId,
                 accountName: worker.name,
+                username: worker.username,
                 reason: `kickout:${reason}`,
                 offlineMs: 0,
             });
-            addAccountLog('kickout_stop', `账号 ${worker.name} 被踢下线，已自动停止`, accountId, worker.name, { reason });
-            stopWorker(accountId);
         } else if (msg.type === 'api_response') {
             const { id, result, error } = msg;
             managerScheduler.clear(`api_timeout_${accountId}_${id}`);
@@ -335,7 +344,7 @@ function createWorkerManager(options: WorkerManagerOptions) {
             if (gid > 0) {
                 const { addFriendToBlacklist: addToBlacklist } = require('../models/store');
                 addToBlacklist(accountId, gid);
-                log('好友', `已将好友 ${msg.friendName || `GID:${gid}`} 加入黑名单`, {
+                log('friend', `added friend ${msg.friendName || `GID:${gid}`} to blacklist`, {
                     accountId: String(accountId),
                     accountName: worker.name,
                     friendGid: gid,
@@ -352,7 +361,7 @@ function createWorkerManager(options: WorkerManagerOptions) {
 
     function callWorkerApi(accountId: string, method: string, ...args: any[]): Promise<any> {
         const worker = workers[accountId];
-        if (!worker) return Promise.reject(new Error('账号未运行'));
+        if (!worker) return Promise.reject(new Error('account is not running'));
 
         return new Promise((resolve, reject) => {
             const id = worker.reqId++;

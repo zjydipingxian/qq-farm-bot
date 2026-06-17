@@ -51,6 +51,23 @@ function normalizeOfflineReminder(input: unknown): OfflineReminder {
     const msg = (src.msg !== undefined && src.msg !== null)
         ? String(src.msg).trim()
         : DEFAULT_OFFLINE_REMINDER.msg;
+    const autoReconnectEnabled = src.autoReconnectEnabled === true
+        || src.autoReconnectEnabled === 'true'
+        || src.autoReconnectEnabled === 1
+        || src.autoReconnectEnabled === '1';
+    let reconnectDelaySec = Number.parseInt(src.reconnectDelaySec, 10);
+    if (!Number.isFinite(reconnectDelaySec) || reconnectDelaySec < 0) {
+        reconnectDelaySec = DEFAULT_OFFLINE_REMINDER.reconnectDelaySec;
+    }
+    const reconnectCodeEndpoint = (src.reconnectCodeEndpoint !== undefined && src.reconnectCodeEndpoint !== null)
+        ? String(src.reconnectCodeEndpoint).trim()
+        : DEFAULT_OFFLINE_REMINDER.reconnectCodeEndpoint;
+    const reconnectApiToken = (src.reconnectApiToken !== undefined && src.reconnectApiToken !== null)
+        ? String(src.reconnectApiToken).trim()
+        : DEFAULT_OFFLINE_REMINDER.reconnectApiToken;
+    const reconnectOpenid = (src.reconnectOpenid !== undefined && src.reconnectOpenid !== null)
+        ? String(src.reconnectOpenid).trim()
+        : DEFAULT_OFFLINE_REMINDER.reconnectOpenid;
     return {
         channel,
         reloginUrlMode,
@@ -59,6 +76,11 @@ function normalizeOfflineReminder(input: unknown): OfflineReminder {
         title,
         msg,
         offlineDeleteSec,
+        autoReconnectEnabled,
+        reconnectDelaySec,
+        reconnectCodeEndpoint,
+        reconnectApiToken,
+        reconnectOpenid,
     };
 }
 

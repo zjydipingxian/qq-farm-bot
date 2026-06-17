@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref, computed, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import api from '@/api'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import { useUserStore } from '@/stores/user'
-
-declare const __APP_VERSION__: string
 
 const userStore = useUserStore()
 const appVersion = __APP_VERSION__
@@ -30,54 +28,66 @@ const claimModalContent = ref({
   title: '',
   message: '',
   cardCode: '',
-  days: 0
+  days: 0,
 })
 
 const passwordStrength = computed(() => {
   const pwd = password.value
-  if (!pwd) return { score: 0, level: '', valid: false }
-  
+  if (!pwd)
+    return { score: 0, level: '', valid: false, color: 'var(--theme-text-muted)' }
+
   let score = 0
-  
-  if (pwd.length >= 6) score++
-  if (pwd.length >= 10) score++
-  
+  if (pwd.length >= 6)
+    score++
+  if (pwd.length >= 10)
+    score++
+
   let typeCount = 0
-  if (/[a-z]/.test(pwd)) typeCount++
-  if (/[A-Z]/.test(pwd)) typeCount++
-  if (/[0-9]/.test(pwd)) typeCount++
-  if (/[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\;'/`~]/.test(pwd)) typeCount++
-  
-  if (typeCount >= 2) score += 2
-  
-  if (typeCount >= 3) score++
-  if (typeCount >= 4) score++
-  
+  if (/[a-z]/.test(pwd))
+    typeCount++
+  if (/[A-Z]/.test(pwd))
+    typeCount++
+  if (/\d/.test(pwd))
+    typeCount++
+  if (/[!@#$%^&*(),.?":{}|<>_\-+=[\]\\;'/`~]/.test(pwd))
+    typeCount++
+
+  if (typeCount >= 2)
+    score += 2
+  if (typeCount >= 3)
+    score++
+  if (typeCount >= 4)
+    score++
+
   const commonPasswords = ['password', '123456', 'qwerty', 'abc123', '111111']
-  if (commonPasswords.some(p => pwd.toLowerCase().includes(p))) {
+  if (commonPasswords.some(p => pwd.toLowerCase().includes(p)))
     score = Math.max(0, score - 2)
-  }
-  
+
   const level = score <= 2 ? '弱' : score <= 4 ? '中' : score <= 6 ? '强' : '非常强'
-  const color = score <= 2 ? '#ef5350' : score <= 4 ? '#ffa726' : score <= 6 ? '#66bb6a' : '#43a047'
+  const color = score <= 2 ? 'var(--theme-danger)' : score <= 4 ? 'var(--theme-warning)' : 'var(--theme-success)'
   const valid = pwd.length >= 6 && typeCount >= 2
-  
+
   return { score, level, color, valid }
 })
 
+const strengthPercent = computed(() => `${Math.min(passwordStrength.value.score * 12.5, 100)}%`)
+
 const usernameValid = computed(() => {
   const name = username.value
-  if (!name) return { valid: false, message: '' }
-  if (name.length < 3) return { valid: false, message: '用户名至少3位' }
-  if (name.length > 32) return { valid: false, message: '用户名最多32位' }
-  if (!/^[a-zA-Z0-9_]+$/.test(name)) return { valid: false, message: '只能包含字母、数字、下划线' }
+  if (!name)
+    return { valid: false, message: '' }
+  if (name.length < 3)
+    return { valid: false, message: '用户名至少 3 位' }
+  if (name.length > 32)
+    return { valid: false, message: '用户名最多 32 位' }
+  if (!/^\w+$/.test(name))
+    return { valid: false, message: '只能包含字母、数字、下划线' }
   return { valid: true, message: '' }
 })
 
 watch(password, () => {
-  if (!isLogin.value && password.value) {
+  if (!isLogin.value && password.value)
     showPasswordStrength.value = true
-  }
 })
 
 function validateForm(): boolean {
@@ -85,40 +95,41 @@ function validateForm(): boolean {
     error.value = '请输入用户名'
     return false
   }
-  
+
   if (!usernameValid.value.valid) {
     error.value = usernameValid.value.message
     return false
   }
-  
+
   if (!password.value) {
     error.value = '请输入密码'
     return false
   }
-  
+
   if (!isLogin.value) {
     if (password.value.length < 6) {
-      error.value = '密码长度至少6位'
+      error.value = '密码长度至少 6 位'
       return false
     }
-    
+
     if (!passwordStrength.value.valid) {
-      error.value = '密码强度不足：需包含大写字母、小写字母、数字、特殊符号中的至少两种'
+      error.value = '密码强度不足：至少包含字母、数字、符号中的两类'
       return false
     }
-    
+
     if (!cardCode.value) {
       error.value = '请输入卡密'
       return false
     }
   }
-  
+
   return true
 }
 
 async function handleSubmit() {
-  if (!validateForm()) return
-  
+  if (!validateForm())
+    return
+
   loading.value = true
   error.value = ''
   success.value = ''
@@ -127,27 +138,24 @@ async function handleSubmit() {
     if (isLogin.value) {
       const result = await userStore.login(username.value, password.value)
       if (result.ok) {
-        if (result.data?.mustChangePassword) {
-          success.value = '登录成功！请修改默认密码以确保账户安全'
-        }
+        if (result.data?.mustChangePassword)
+          success.value = '登录成功，请尽快修改默认密码以确保账号安全'
         setTimeout(() => {
           window.location.href = '/'
         }, 500)
       }
+      else if (result.errorType === 'rate_limit') {
+        error.value = result.error || '请求过于频繁，请稍后重试'
+        if (result.remainingMs)
+          rateLimitRemaining.value = Math.ceil(result.remainingMs / 1000)
+      }
+      else if (result.errorType === 'locked') {
+        error.value = result.error || '账号已被锁定'
+        if (result.remainingMs)
+          lockoutRemaining.value = Math.ceil(result.remainingMs / 1000 / 60)
+      }
       else {
-        if (result.errorType === 'rate_limit') {
-          error.value = result.error || '请求过于频繁，请稍后重试'
-          if (result.remainingMs) {
-            rateLimitRemaining.value = Math.ceil(result.remainingMs / 1000)
-          }
-        } else if (result.errorType === 'locked') {
-          error.value = result.error || '账户已被锁定'
-          if (result.remainingMs) {
-            lockoutRemaining.value = Math.ceil(result.remainingMs / 1000 / 60)
-          }
-        } else {
-          error.value = result.error || '登录失败'
-        }
+        error.value = result.error || '登录失败'
       }
     }
     else {
@@ -167,15 +175,15 @@ async function handleSubmit() {
     const data = e.response?.data
     if (data?.errorType === 'rate_limit') {
       error.value = data.error || '请求过于频繁'
-      if (data.remainingMs) {
+      if (data.remainingMs)
         rateLimitRemaining.value = Math.ceil(data.remainingMs / 1000)
-      }
-    } else if (data?.errorType === 'locked') {
-      error.value = data.error || '账户已被锁定'
-      if (data.remainingMs) {
+    }
+    else if (data?.errorType === 'locked') {
+      error.value = data.error || '账号已被锁定'
+      if (data.remainingMs)
         lockoutRemaining.value = Math.ceil(data.remainingMs / 1000 / 60)
-      }
-    } else {
+    }
+    else {
       error.value = data?.error || e.message || '操作异常'
     }
   }
@@ -196,35 +204,33 @@ function toggleMode() {
 async function checkCardClaimStatus() {
   try {
     const res = await api.get('/api/card-claim/status')
-    if (res.data.ok) {
+    if (res.data.ok)
       cardClaimEnabled.value = res.data.enabled === true
-    }
   }
   catch (e) {
-    console.error('检查卡密领取状态失败:', e)
+    console.error('检查卡密领取状态失败', e)
   }
 }
 
 async function claimFreeCard() {
   if (cardClaimLoading.value)
     return
-  
+
   cardClaimLoading.value = true
   error.value = ''
-  
+
   try {
     const res = await api.post('/api/card-claim/claim')
-    
+
     if (res.data.ok) {
       cardCode.value = res.data.cardCode
       claimModalContent.value = {
         success: true,
         title: '领取成功',
-        message: `成功领取 ${res.data.days} 天卡密！`,
+        message: `成功领取 ${res.data.days} 天卡密，已自动填入注册表单。`,
         cardCode: res.data.cardCode,
-        days: res.data.days
+        days: res.data.days,
       }
-      showClaimModal.value = true
     }
     else {
       claimModalContent.value = {
@@ -232,10 +238,10 @@ async function claimFreeCard() {
         title: '领取失败',
         message: res.data.error || '领取失败，请稍后重试',
         cardCode: '',
-        days: 0
+        days: 0,
       }
-      showClaimModal.value = true
     }
+    showClaimModal.value = true
   }
   catch (e: any) {
     const data = e.response?.data
@@ -244,7 +250,7 @@ async function claimFreeCard() {
       title: '领取失败',
       message: data?.error || e.message || '领取失败',
       cardCode: '',
-      days: 0
+      days: 0,
     }
     showClaimModal.value = true
   }
@@ -257,158 +263,138 @@ function closeClaimModal() {
   showClaimModal.value = false
 }
 
+async function fetchGameVersion() {
+  try {
+    const res = await api.get('/api/game-version')
+    if (res.data.ok)
+      gameVersion.value = res.data.clientVersion
+  }
+  catch (e) {
+    console.error('获取游戏版本失败', e)
+  }
+}
+
 onMounted(() => {
   checkCardClaimStatus()
   fetchGameVersion()
 })
-
-async function fetchGameVersion() {
-  try {
-    const res = await api.get('/api/game-version')
-    if (res.data.ok) {
-      gameVersion.value = res.data.clientVersion
-    }
-  }
-  catch (e) {
-    console.error('获取游戏版本失败:', e)
-  }
-}
 </script>
 
 <template>
-  <div class="login-container">
-    <!-- 背景装饰 -->
-    <div class="bg-decoration">
-      <!-- 太阳 -->
-      <div class="sun" />
-      <!-- 云朵 -->
-      <div class="cloud cloud-1" />
-      <div class="cloud cloud-2" />
-      <div class="cloud cloud-3" />
-      <!-- 草地 -->
-      <div class="grass" />
-      <!-- 植物装饰 -->
-      <div class="plant plant-1">
-        🌱
+  <main class="login-screen">
+    <section class="login-intro">
+      <div class="brand-mark">
+        <span class="i-carbon-crop-growth" />
       </div>
-      <div class="plant plant-2">
-        🌻
-      </div>
-      <div class="plant plant-3">
-        🌾
-      </div>
-      <div class="plant plant-4">
-        🌿
-      </div>
-      <div class="plant plant-5">
-        🥕
-      </div>
-      <div class="plant plant-6">
-        🍅
-      </div>
-    </div>
+      <h1>QQ 农场自动化控制台</h1>
+      <p>集中管理账号、任务、日志和策略，面向长期运行的农场自动化后台。</p>
 
-    <!-- 登录卡片 -->
-    <div class="login-card">
-      <!-- Logo 区域 -->
-      <div class="logo-area">
-        <div class="logo-icon">
-          <span class="text-5xl">🌾</span>
+      <div class="intro-grid">
+        <div class="intro-card">
+          <span class="i-carbon-dashboard" />
+          <strong>运行总览</strong>
+          <small>状态、日志和资源指标集中展示</small>
         </div>
-        <h1 class="logo-title font-display">
-          QQ农场智能助手
-        </h1>
-        <p class="logo-subtitle font-body">
-          {{ isLogin ? '欢迎回来，开始你的农场之旅' : '加入我们，开启农场新生活' }}
-        </p>
+        <div class="intro-card">
+          <span class="i-carbon-security" />
+          <strong>账号安全</strong>
+          <small>登录限流、锁定和卡密注册保留</small>
+        </div>
+        <div class="intro-card">
+          <span class="i-carbon-data-table" />
+          <strong>策略配置</strong>
+          <small>后台风格，更适合高频操作</small>
+        </div>
       </div>
+    </section>
 
-      <!-- 表单区域 -->
-      <form class="form-area" @submit.prevent="handleSubmit">
-        <div class="form-group">
-          <label class="form-label font-body">
-            <span class="label-icon">👤</span>
-            用户名
-          </label>
-          <BaseInput
-            id="username"
-            v-model="username"
-            type="text"
-            placeholder="请输入用户名（3-32位字母数字下划线）"
-            required
-          />
-          <p v-if="username && !usernameValid.valid" class="form-hint error">
-            {{ usernameValid.message }}
+    <section class="auth-panel">
+      <div class="auth-header">
+        <div>
+          <p class="eyebrow">
+            {{ isLogin ? 'Sign in' : 'Create account' }}
           </p>
+          <h2>{{ isLogin ? '登录控制台' : '创建新账号' }}</h2>
+        </div>
+        <ElTag effect="plain">
+          v{{ appVersion }}
+        </ElTag>
+      </div>
+
+      <form class="auth-form" @submit.prevent="handleSubmit">
+        <BaseInput
+          id="username"
+          v-model="username"
+          label="用户名"
+          placeholder="3-32 位字母、数字或下划线"
+          required
+          clearable
+        />
+        <p v-if="username && !usernameValid.valid" class="field-error">
+          {{ usernameValid.message }}
+        </p>
+
+        <BaseInput
+          id="password"
+          v-model="password"
+          label="密码"
+          type="password"
+          placeholder="请输入密码"
+          required
+        />
+
+        <div v-if="showPasswordStrength && password" class="strength-row">
+          <div class="strength-track">
+            <div
+              class="strength-fill"
+              :style="{ width: strengthPercent, background: passwordStrength.color }"
+            />
+          </div>
+          <span :style="{ color: passwordStrength.color }">{{ passwordStrength.level }}</span>
         </div>
 
-        <div class="form-group">
-          <label class="form-label font-body">
-            <span class="label-icon">🔒</span>
-            密码
-          </label>
-          <BaseInput
-            id="password"
-            v-model="password"
-            type="password"
-            placeholder="请输入密码"
-            required
-          />
-          <div v-if="showPasswordStrength && password" class="password-strength">
-            <div class="strength-bar">
-              <div 
-                class="strength-fill" 
-                :style="{ width: Math.min(passwordStrength.score * 12.5, 100) + '%', backgroundColor: passwordStrength.color }"
-              />
-            </div>
-            <span class="strength-text" :style="{ color: passwordStrength.color }">
-              {{ passwordStrength.level }}
-            </span>
-          </div>
-          <div v-if="error" class="message error-message">
-            <span class="message-icon">⚠️</span>
-            <div class="message-content">
-              {{ error }}
-              <span v-if="lockoutRemaining > 0" class="lockout-timer">
-                ({{ lockoutRemaining }} 分钟后解锁)
-              </span>
-              <span v-if="rateLimitRemaining > 0" class="lockout-timer">
-                ({{ rateLimitRemaining }} 秒后可重试)
-              </span>
-            </div>
-          </div>
-          <div v-if="success" class="message success-message">
-            <span class="message-icon">✅</span>
-            {{ success }}
-          </div>
-        </div>
-
-        <div v-if="!isLogin" class="form-group">
-          <label class="form-label font-body">
-            <span class="label-icon">🎫</span>
-            卡密
-          </label>
-          
-          <div v-if="cardClaimEnabled" class="mb-2">
-            <button
-              type="button"
-              class="claim-card-btn font-body"
-              :disabled="cardClaimLoading"
+        <div v-if="!isLogin" class="card-code-group">
+          <div class="card-code-toolbar">
+            <span>卡密</span>
+            <ElButton
+              v-if="cardClaimEnabled"
+              text
+              type="primary"
+              :loading="cardClaimLoading"
               @click="claimFreeCard"
             >
-              <span v-if="cardClaimLoading" class="i-svg-spinners-90-ring-with-bg" />
-              <span v-else>🎁 免费领取卡密</span>
-            </button>
+              免费领取
+            </ElButton>
           </div>
-          
           <BaseInput
             id="cardCode"
             v-model="cardCode"
-            type="text"
             placeholder="请输入卡密"
             :required="!isLogin"
+            clearable
           />
         </div>
+
+        <ElAlert
+          v-if="error"
+          type="error"
+          show-icon
+          :closable="false"
+        >
+          <template #title>
+            {{ error }}
+            <span v-if="lockoutRemaining > 0">（{{ lockoutRemaining }} 分钟后解锁）</span>
+            <span v-if="rateLimitRemaining > 0">（{{ rateLimitRemaining }} 秒后可重试）</span>
+          </template>
+        </ElAlert>
+
+        <ElAlert
+          v-if="success"
+          :title="success"
+          type="success"
+          show-icon
+          :closable="false"
+        />
 
         <BaseButton
           type="submit"
@@ -417,897 +403,270 @@ async function fetchGameVersion() {
           :loading="loading"
           class="submit-btn"
         >
-          <span v-if="!loading">{{ isLogin ? '🚀 立即登录' : '🎉 立即注册' }}</span>
+          {{ isLogin ? '登录' : '注册' }}
         </BaseButton>
       </form>
 
-      <!-- 切换区域 -->
-      <div class="switch-area">
-        <button
-          type="button"
-          class="switch-btn font-body"
-          @click="toggleMode"
-        >
-          {{ isLogin ? '🌱 没有账号？立即注册' : '🌿 已有账号？立即登录' }}
+      <div class="auth-footer">
+        <button type="button" @click="toggleMode">
+          {{ isLogin ? '没有账号？立即注册' : '已有账号？返回登录' }}
         </button>
-      </div>
-
-      <!-- 底部装饰 -->
-      <div class="card-footer font-body">
-        <span>🌻 愿你的农场丰收满满 🌻</span>
-        <div class="footer-info">
-          <span class="version">v{{ appVersion }}</span>
-          <span class="separator">|</span>
+        <div class="version-line">
           <a
             href="https://github.com/XyhTender/qq-farm-automation-bot"
             target="_blank"
             rel="noopener noreferrer"
-            class="github-link"
           >
             GitHub
           </a>
-        </div>
-        <div v-if="gameVersion" class="game-version">
-          当前游戏版本：{{ gameVersion }}
+          <span v-if="gameVersion">游戏版本 {{ gameVersion }}</span>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- 卡密领取结果弹窗 -->
-    <Teleport to="body">
-      <Transition name="modal">
-        <div
-          v-if="showClaimModal"
-          class="claim-modal-overlay"
-          @click.self="closeClaimModal"
-        >
-          <div class="claim-modal">
-            <div class="claim-modal-header">
-              <span class="claim-modal-icon">{{ claimModalContent.success ? '🎉' : '⚠️' }}</span>
-              <h3 class="claim-modal-title">
-                {{ claimModalContent.title }}
-              </h3>
-            </div>
-            <div class="claim-modal-body">
-              <p class="claim-modal-message font-body">
-                {{ claimModalContent.message }}
-              </p>
-              <div v-if="claimModalContent.success && claimModalContent.cardCode" class="claim-modal-card-info">
-                <div class="card-code-label">
-                  卡密已自动填入
-                </div>
-                <div class="card-code-value">
-                  {{ claimModalContent.cardCode }}
-                </div>
-              </div>
-            </div>
-            <div class="claim-modal-footer">
-              <button class="claim-modal-btn" @click="closeClaimModal">
-                {{ claimModalContent.success ? '开始注册' : '我知道了' }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
-  </div>
+    <ElDialog
+      v-model="showClaimModal"
+      :title="claimModalContent.title"
+      width="420px"
+      append-to-body
+      @closed="closeClaimModal"
+    >
+      <div class="claim-result">
+        <ElResult
+          :icon="claimModalContent.success ? 'success' : 'error'"
+          :title="claimModalContent.message"
+        />
+        <ElInput
+          v-if="claimModalContent.success && claimModalContent.cardCode"
+          :model-value="claimModalContent.cardCode"
+          readonly
+        />
+      </div>
+      <template #footer>
+        <ElButton type="primary" @click="closeClaimModal">
+          知道了
+        </ElButton>
+      </template>
+    </ElDialog>
+  </main>
 </template>
 
 <style scoped>
-.login-container {
+.login-screen {
   min-height: 100vh;
-  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 440px;
+  gap: 40px;
+  align-items: center;
+  padding: clamp(24px, 5vw, 64px);
+  background: var(--theme-page);
+}
+
+.login-intro {
+  max-width: 680px;
+}
+
+.brand-mark {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--theme-primary);
+  color: white;
+  font-size: 24px;
+}
+
+.login-intro h1 {
+  margin: 24px 0 12px;
+  color: var(--theme-text);
+  font-size: clamp(34px, 4vw, 52px);
+  line-height: 1.12;
+  letter-spacing: 0;
+}
+
+.login-intro p {
+  max-width: 560px;
+  color: var(--theme-text-muted);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.intro-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 36px;
+}
+
+.intro-card {
+  min-height: 112px;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 8px;
   justify-content: center;
-  background: linear-gradient(180deg, #b8e4f7 0%, #87ceeb 30%, #6dbf5b 60%, #4a8c3f 100%);
-  position: relative;
-  overflow: hidden;
+  padding: 16px;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg);
+  background: color-mix(in srgb, var(--theme-surface) 82%, transparent);
+  box-shadow: none;
 }
 
-/* 背景装饰 */
-.bg-decoration {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-/* 太阳 */
-.sun {
-  position: absolute;
-  top: 40px;
-  right: 80px;
-  width: 80px;
-  height: 80px;
-  background: radial-gradient(circle, #ffd700 0%, #ffa500 100%);
-  border-radius: 50%;
-  box-shadow: 0 0 60px 20px rgba(255, 215, 0, 0.4);
-  animation: sunPulse 4s ease-in-out infinite;
-}
-
-@keyframes sunPulse {
-  0%,
-  100% {
-    transform: scale(1);
-    box-shadow: 0 0 60px 20px rgba(255, 215, 0, 0.4);
-  }
-  50% {
-    transform: scale(1.05);
-    box-shadow: 0 0 80px 30px rgba(255, 215, 0, 0.5);
-  }
-}
-
-/* 云朵 */
-.cloud {
-  position: absolute;
-  background: white;
-  border-radius: 50px;
-  opacity: 0.9;
-}
-
-.cloud::before,
-.cloud::after {
-  content: '';
-  position: absolute;
-  background: white;
-  border-radius: 50%;
-}
-
-.cloud-1 {
-  top: 60px;
-  left: 10%;
-  width: 100px;
-  height: 40px;
-  animation: cloudFloat 20s linear infinite;
-}
-
-.cloud-1::before {
-  width: 50px;
-  height: 50px;
-  top: -25px;
-  left: 15px;
-}
-
-.cloud-1::after {
-  width: 35px;
-  height: 35px;
-  top: -15px;
-  right: 15px;
-}
-
-.cloud-2 {
-  top: 120px;
-  left: 60%;
-  width: 80px;
-  height: 32px;
-  animation: cloudFloat 25s linear infinite;
-  animation-delay: -5s;
-}
-
-.cloud-2::before {
-  width: 40px;
-  height: 40px;
-  top: -20px;
-  left: 10px;
-}
-
-.cloud-2::after {
-  width: 28px;
-  height: 28px;
-  top: -12px;
-  right: 10px;
-}
-
-.cloud-3 {
-  top: 200px;
-  left: 30%;
-  width: 60px;
-  height: 24px;
-  animation: cloudFloat 30s linear infinite;
-  animation-delay: -10s;
-}
-
-.cloud-3::before {
-  width: 30px;
-  height: 30px;
-  top: -15px;
-  left: 8px;
-}
-
-.cloud-3::after {
-  width: 22px;
-  height: 22px;
-  top: -10px;
-  right: 8px;
-}
-
-@keyframes cloudFloat {
-  0% {
-    transform: translateX(-100px);
-  }
-  100% {
-    transform: translateX(calc(100vw + 100px));
-  }
-}
-
-/* 草地 */
-.grass {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 120px;
-  background: linear-gradient(180deg, var(--theme-primary) 0%, color-mix(in srgb, var(--theme-primary) 80%, #000) 100%);
-  border-radius: 100% 100% 0 0;
-}
-
-.grass::before {
-  content: '';
-  position: absolute;
-  top: -20px;
-  left: 0;
-  right: 0;
-  height: 40px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 20'%3E%3Cpath fill='%237CB342' d='M0 20 Q25 0 50 20 Q75 0 100 20 V0 H0Z'/%3E%3C/svg%3E")
-    repeat-x;
-  background-size: 100px 20px;
-}
-
-/* 植物装饰 */
-.plant {
-  position: absolute;
-  font-size: 2rem;
-  animation: plantSway 3s ease-in-out infinite;
-}
-
-.plant-1 {
-  bottom: 100px;
-  left: 5%;
-  animation-delay: 0s;
-}
-.plant-2 {
-  bottom: 80px;
-  left: 15%;
-  animation-delay: 0.5s;
-  font-size: 2.5rem;
-}
-.plant-3 {
-  bottom: 110px;
-  left: 25%;
-  animation-delay: 1s;
-}
-.plant-4 {
-  bottom: 90px;
-  right: 25%;
-  animation-delay: 1.5s;
-}
-.plant-5 {
-  bottom: 100px;
-  right: 15%;
-  animation-delay: 2s;
-}
-.plant-6 {
-  bottom: 85px;
-  right: 5%;
-  animation-delay: 2.5s;
-  font-size: 2.5rem;
-}
-
-@keyframes plantSway {
-  0%,
-  100% {
-    transform: rotate(-5deg);
-  }
-  50% {
-    transform: rotate(5deg);
-  }
-}
-
-/* 聚焦弹跳动画 */
-@keyframes focusRingBounce {
-  0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--theme-primary) 50%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 0 6px color-mix(in srgb, var(--theme-primary) 20%, transparent);
-  }
-  100% {
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-primary) 30%, transparent);
-  }
-}
-
-/* 登录卡片 — 木框风格 */
-.login-card {
-  width: 100%;
-  max-width: 420px;
-  margin: 20px;
-  padding: 40px;
-  background: rgba(254, 249, 239, 0.97);
-  border-radius: 24px;
-  box-shadow:
-    0 6px 0 #6b4f0e,
-    0 12px 40px rgba(0, 0, 0, 0.2),
-    0 0 0 4px #8b6914;
-  position: relative;
-  z-index: 10;
-  backdrop-filter: blur(10px);
-}
-
-/* 农场风格输入框 */
-.login-card :deep(.base-input) {
-  border-radius: 0.75rem;
-  border: 2px solid #e5e7eb;
-  padding: 0.625rem 0.875rem;
-  font-size: 0.9375rem;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.login-card :deep(.base-input:focus) {
-  border-color: var(--theme-primary);
-  animation: focusRingBounce 0.4s ease forwards;
-  outline: none;
-}
-
-/* Logo 区域 */
-.logo-area {
-  text-align: center;
-  margin-bottom: 32px;
-}
-
-.logo-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 80px;
-  height: 80px;
-  background: linear-gradient(135deg, #6dbf5b 0%, #4a8c3f 100%);
-  border-radius: 20px;
-  margin-bottom: 16px;
-  box-shadow: 0 4px 0 #3a6b2e, 0 8px 20px rgba(74, 140, 63, 0.3);
-  animation: logoBounce 2s ease-in-out infinite;
-  border: 3px solid rgba(255, 255, 255, 0.3);
-}
-
-@keyframes logoBounce {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-5px);
-  }
-}
-
-.logo-title {
-  font-size: 1.75rem;
-  font-weight: 700;
+.intro-card > span {
   color: var(--theme-primary);
-  margin-bottom: 8px;
-  text-shadow: 0 2px 4px color-mix(in srgb, var(--theme-primary) 10%, transparent);
+  font-size: 22px;
 }
 
-.logo-subtitle {
-  font-size: 0.9rem;
-  color: color-mix(in srgb, var(--theme-primary) 80%, white);
-  font-weight: 500;
+.intro-card strong {
+  color: var(--theme-text);
 }
 
-/* 表单区域 */
-.form-area {
+.intro-card small {
+  color: var(--theme-text-muted);
+  line-height: 1.6;
+}
+
+.auth-panel {
+  width: 100%;
+  padding: 26px;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg);
+  background: var(--theme-surface);
+  box-shadow: var(--theme-shadow-md);
+}
+
+.auth-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 26px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: var(--theme-primary);
+  font-size: 12px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.auth-header h2 {
+  margin: 0;
+  color: var(--theme-text);
+  font-size: 24px;
+}
+
+.auth-form {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 14px;
 }
 
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.field-error {
+  margin: -6px 0 0;
+  color: var(--theme-danger);
+  font-size: 12px;
 }
 
-.form-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #37474f;
-}
-
-.label-icon {
-  font-size: 1rem;
-}
-
-.form-hint {
-  font-size: 0.75rem;
-  color: color-mix(in srgb, var(--theme-primary) 80%, white);
-  margin-top: 4px;
-}
-
-.form-hint.error {
-  color: #ef5350;
-}
-
-.password-strength {
+.strength-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 6px;
+  gap: 10px;
+  color: var(--theme-text-muted);
+  font-size: 12px;
 }
 
-.strength-bar {
+.strength-track {
   flex: 1;
-  height: 4px;
-  background: #e0e0e0;
-  border-radius: 2px;
+  height: 6px;
   overflow: hidden;
+  border-radius: 999px;
+  background: var(--theme-surface-soft);
 }
 
 .strength-fill {
   height: 100%;
-  transition: width 0.3s ease, background-color 0.3s ease;
+  transition:
+    width var(--theme-duration),
+    background var(--theme-duration);
 }
 
-.strength-text {
-  font-size: 0.75rem;
-  font-weight: 500;
-  min-width: 50px;
+.card-code-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.lockout-timer {
-  display: block;
-  font-size: 0.75rem;
-  opacity: 0.8;
-  margin-top: 2px;
-}
-
-.security-tips {
-  background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%);
-  border: 1px solid #ffe082;
-  border-radius: 12px;
-  padding: 12px 16px;
-  margin-top: 8px;
-}
-
-.tip-title {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #f57c00;
-  margin-bottom: 6px;
-}
-
-.tip-list {
-  margin: 0;
-  padding-left: 16px;
-  font-size: 0.75rem;
-  color: #ef6c00;
-}
-
-.tip-list li {
-  margin: 2px 0;
-}
-
-/* 消息提示 */
-.message {
+.card-code-toolbar {
+  min-height: 28px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  border-radius: 12px;
-  font-size: 0.875rem;
+  justify-content: space-between;
+  color: var(--theme-text);
+  font-size: 13px;
+  font-weight: 650;
 }
 
-.message-icon {
-  font-size: 1rem;
-}
-
-.error-message {
-  background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
-  color: #c62828;
-  border: 1px solid #ef9a9a;
-}
-
-.success-message {
-  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
-  color: color-mix(in srgb, var(--theme-primary) 70%, #000);
-  border: 1px solid color-mix(in srgb, var(--theme-primary) 40%, white);
-}
-
-/* 提交按钮 — 3D按压效果 */
 .submit-btn {
-  margin-top: 8px;
-  height: 48px;
-  font-size: 1rem;
-  font-weight: 700;
-  border-radius: 18px;
-  background: linear-gradient(135deg, #6dbf5b 0%, #4a8c3f 100%);
-  box-shadow: 0 4px 0 #3a6b2e, 0 6px 16px rgba(74, 140, 63, 0.3);
-  transition: all 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
-  border: 3px solid rgba(255, 255, 255, 0.2);
+  margin-top: 4px;
 }
 
-.submit-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 0 #3a6b2e, 0 8px 20px rgba(74, 140, 63, 0.35);
-}
-
-.submit-btn:active {
-  transform: translateY(3px);
-  box-shadow: 0 1px 0 #3a6b2e, 0 1px 4px rgba(74, 140, 63, 0.2);
-}
-
-/* 切换区域 */
-.switch-area {
-  text-align: center;
-  margin-top: 24px;
-}
-
-.switch-btn {
-  background: none;
-  border: none;
-  color: color-mix(in srgb, var(--theme-primary) 80%, white);
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  padding: 8px 16px;
-  border-radius: 20px;
-  transition: all 0.3s ease;
-}
-
-.switch-btn:hover {
-  background: color-mix(in srgb, var(--theme-primary) 10%, transparent);
-  color: var(--theme-primary);
-}
-
-/* 卡片底部 */
-.card-footer {
-  text-align: center;
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid color-mix(in srgb, var(--theme-primary) 20%, transparent);
-  color: color-mix(in srgb, var(--theme-primary) 70%, white);
-  font-size: 0.8rem;
-}
-
-.footer-info {
-  margin-top: 8px;
+.auth-footer {
   display: flex;
+  flex-direction: column;
+  gap: 12px;
   align-items: center;
+  margin-top: 22px;
+}
+
+.auth-footer button {
+  border: 0;
+  background: transparent;
+  color: var(--theme-primary);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.version-line {
+  display: flex;
+  flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
-  font-size: 0.75rem;
-  color: color-mix(in srgb, var(--theme-primary) 50%, white);
+  gap: 10px;
+  color: var(--theme-text-subtle);
+  font-size: 12px;
 }
 
-.separator {
-  color: color-mix(in srgb, var(--theme-primary) 50%, white);
-}
-
-.github-link {
-  color: color-mix(in srgb, var(--theme-primary) 70%, white);
+.version-line a {
+  color: var(--theme-text-muted);
   text-decoration: none;
-  transition: color 0.2s ease;
 }
 
-.github-link:hover {
-  color: var(--theme-primary);
-  text-decoration: underline;
+.claim-result :deep(.el-result) {
+  padding: 0 0 16px;
 }
 
-.game-version {
-  margin-top: 8px;
-  font-size: 0.7rem;
-  color: color-mix(in srgb, var(--theme-primary) 50%, white);
-  text-align: center;
-}
-
-.claim-card-btn {
-  width: 100%;
-  padding: 10px 16px;
-  background: var(--theme-gradient);
-  border: none;
-  border-radius: 0.75rem;
-  color: white;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--theme-primary) 25%, transparent);
-}
-
-.claim-card-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--theme-primary) 35%, transparent);
-}
-
-.claim-card-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-
-/* 暗色模式适配 */
-@media (prefers-color-scheme: dark) {
-  .login-container {
-    background: linear-gradient(180deg, #1a2e1a 0%, #1e4d2b 50%, #0d2818 100%);
+@media (max-width: 900px) {
+  .login-screen {
+    grid-template-columns: 1fr;
+    gap: 28px;
   }
 
-  .login-card {
-    background: rgba(30, 50, 30, 0.97);
-    box-shadow:
-      0 6px 0 #0a1a0a,
-      0 12px 40px rgba(0, 0, 0, 0.4),
-      0 0 0 4px #4a6b3f;
-  }
-
-  .login-card :deep(.base-input) {
-    border-color: #4a6b3f;
-    background-color: rgba(0, 0, 0, 0.2);
-    color: #e2e8f0;
-  }
-
-  .login-card :deep(.base-input:focus) {
-    border-color: #6dbf5b;
-  }
-
-  .logo-subtitle {
-    color: #8bb67e;
-  }
-
-  .form-label {
-    color: #a5d6a7;
-  }
-
-  .card-footer {
-    border-top-color: rgba(74, 140, 63, 0.3);
-    color: #6dbf5b;
+  .intro-grid {
+    grid-template-columns: 1fr;
   }
 }
 
-/* 响应式适配 */
-@media (max-width: 480px) {
-  .login-card {
-    margin: 10px;
-    padding: 30px 24px;
-    border-radius: 20px;
+@media (max-width: 560px) {
+  .login-screen {
+    padding: 18px;
   }
 
-  .logo-icon {
-    width: 70px;
-    height: 70px;
+  .auth-panel {
+    padding: 20px;
   }
 
-  .logo-title {
-    font-size: 1.5rem;
-  }
-
-  .sun {
-    width: 60px;
-    height: 60px;
-    top: 20px;
-    right: 40px;
-  }
-
-  .plant {
-    font-size: 1.5rem;
-  }
-
-  .plant-2,
-  .plant-6 {
-    font-size: 2rem;
-  }
-}
-
-/* 卡密领取结果弹窗样式 */
-.claim-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 20px;
-  backdrop-filter: blur(4px);
-}
-
-.claim-modal {
-  background: white;
-  border-radius: 20px;
-  max-width: 360px;
-  width: 100%;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  overflow: hidden;
-  animation: modalSlideIn 0.3s ease;
-}
-
-@keyframes modalSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-20px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.claim-modal-header {
-  text-align: center;
-  padding: 24px 20px 16px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-primary) 15%, white) 0%, color-mix(in srgb, var(--theme-primary) 25%, white) 100%);
-}
-
-.claim-modal-icon {
-  font-size: 3rem;
-  display: block;
-  margin-bottom: 8px;
-}
-
-.claim-modal-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--theme-primary);
-  margin: 0;
-}
-
-.claim-modal-body {
-  padding: 20px;
-  text-align: center;
-}
-
-.claim-modal-message {
-  font-size: 1rem;
-  color: #37474f;
-  margin: 0 0 16px;
-  line-height: 1.5;
-}
-
-.claim-modal-card-info {
-  background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
-  border-radius: 12px;
-  padding: 16px;
-  margin-top: 8px;
-}
-
-.card-code-label {
-  font-size: 0.75rem;
-  color: color-mix(in srgb, var(--theme-primary) 80%, white);
-  margin-bottom: 8px;
-}
-
-.card-code-value {
-  font-family: 'Courier New', monospace;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--theme-primary);
-  background: white;
-  padding: 8px 12px;
-  border-radius: 8px;
-  word-break: break-all;
-}
-
-.claim-modal-footer {
-  padding: 0 20px 20px;
-}
-
-.claim-modal-btn {
-  width: 100%;
-  padding: 14px;
-  background: var(--theme-gradient);
-  border: none;
-  border-radius: 12px;
-  color: white;
-  font-size: 1rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.claim-modal-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px color-mix(in srgb, var(--theme-primary) 40%, transparent);
-}
-
-.claim-modal-btn:active {
-  transform: translateY(0);
-}
-
-/* 弹窗过渡动画 */
-.modal-enter-active,
-.modal-leave-active {
-  transition: all 0.3s ease;
-}
-
-.modal-enter-from,
-.modal-leave-to {
-  opacity: 0;
-}
-
-.modal-enter-from .claim-modal,
-.modal-leave-to .claim-modal {
-  transform: translateY(-20px) scale(0.95);
-}
-
-/* 暗色模式适配弹窗 */
-@media (prefers-color-scheme: dark) {
-  .claim-modal {
-    background: #1e3c28;
-  }
-
-  .claim-modal-header {
-    background: linear-gradient(135deg, #1e4d2b 0%, #2e5a3a 100%);
-  }
-
-  .claim-modal-title {
-    color: color-mix(in srgb, var(--theme-primary) 80%, white);
-  }
-
-  .claim-modal-message {
-    color: #a5d6a7;
-  }
-
-  .claim-modal-card-info {
-    background: linear-gradient(135deg, #1a3a2a 0%, #2a4a3a 100%);
-  }
-
-  .card-code-label {
-    color: color-mix(in srgb, var(--theme-primary) 70%, white);
-  }
-
-  .card-code-value {
-    background: #0d2818;
-    color: color-mix(in srgb, var(--theme-primary) 80%, white);
-  }
-}
-
-/* 移动端弹窗优化 */
-@media (max-width: 480px) {
-  .claim-modal-overlay {
-    padding: 16px;
-    align-items: flex-end;
-  }
-
-  .claim-modal {
-    border-radius: 20px 20px 0 0;
-    max-width: 100%;
-    animation: modalSlideUp 0.3s ease;
-  }
-
-  @keyframes modalSlideUp {
-    from {
-      opacity: 0;
-      transform: translateY(100%);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .claim-modal-header {
-    padding: 20px 16px 12px;
-  }
-
-  .claim-modal-icon {
-    font-size: 2.5rem;
-  }
-
-  .claim-modal-body {
-    padding: 16px;
-  }
-
-  .claim-modal-footer {
-    padding: 0 16px 16px;
-  }
-
-  .claim-modal-btn {
-    padding: 12px;
+  .login-intro h1 {
+    font-size: 34px;
   }
 }
 </style>

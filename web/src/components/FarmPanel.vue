@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { useIntervalFn } from '@vueuse/core'
+import { ElMessageBox } from 'element-plus'
 import { storeToRefs } from 'pinia'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
-import ConfirmModal from '@/components/ConfirmModal.vue'
 import LandCard from '@/components/LandCard.vue'
 import { useAccountStore } from '@/stores/account'
 import { useFarmStore } from '@/stores/farm'
@@ -16,53 +16,68 @@ const { currentAccountId, currentAccount } = storeToRefs(accountStore)
 const { status, loading: statusLoading, realtimeConnected } = storeToRefs(statusStore)
 
 const operating = ref(false)
-const confirmVisible = ref(false)
-const confirmConfig = ref({
-  title: '',
-  message: '',
-  opType: '',
-})
+const activeOperation = ref('')
 
-async function executeOperate() {
-  if (!currentAccountId.value || !confirmConfig.value.opType)
+const operations = [
+  { type: 'harvest', label: '收获', icon: 'i-carbon-crop-growth', buttonType: 'primary' as const },
+  { type: 'clear', label: '一键务农', icon: 'i-carbon-clean', buttonType: 'success' as const },
+  { type: 'plant', label: '种植', icon: 'i-carbon-sprout', buttonType: 'primary' as const, plain: true },
+  { type: 'upgrade', label: '升级土地', icon: 'i-carbon-up-to-top', buttonType: 'warning' as const, plain: true },
+  { type: 'all', label: '一键全收', icon: 'i-carbon-flash', buttonType: 'danger' as const, plain: true },
+]
+
+const summaryItems = [
+  { key: 'harvestable', label: '可收', icon: 'i-carbon-crop-growth', type: 'warning' as const },
+  { key: 'growing', label: '生长', icon: 'i-carbon-sprout', type: 'success' as const },
+  { key: 'empty', label: '空闲', icon: 'i-carbon-checkbox', type: 'info' as const },
+  { key: 'dead', label: '枯萎', icon: 'i-carbon-warning', type: 'danger' as const },
+]
+
+async function executeOperate(opType: string) {
+  if (!currentAccountId.value || !opType)
     return
-  confirmVisible.value = false
+
   operating.value = true
+  activeOperation.value = opType
   try {
-    await farmStore.operate(currentAccountId.value, confirmConfig.value.opType)
+    await farmStore.operate(currentAccountId.value, opType)
   }
   finally {
     operating.value = false
+    activeOperation.value = ''
   }
 }
 
-function handleOperate(opType: string) {
+async function handleOperate(opType: string) {
   if (!currentAccountId.value)
     return
 
   const confirmMap: Record<string, string> = {
     harvest: '确定要收获所有成熟作物吗？',
-    clear: '确定要一键务农吗？(除草+除虫+浇水)',
-    plant: '确定要一键种植吗？(根据策略配置)',
-    upgrade: '确定要升级所有可升级的土地吗？(消耗金币)',
-    all: '确定要一键全收吗？(包含收获、除草、种植等)',
+    clear: '确定要一键务农吗？将执行除草、除虫、浇水。',
+    plant: '确定要一键种植吗？系统会按策略配置执行。',
+    upgrade: '确定要升级所有可升级土地吗？该操作会消耗金币。',
+    all: '确定要一键全收吗？包含收获、除草、种植等操作。',
   }
 
-  confirmConfig.value = {
-    title: '确认操作',
-    message: confirmMap[opType] || '确定执行此操作吗？',
-    opType,
+  try {
+    await ElMessageBox.confirm(
+      confirmMap[opType] || '确定执行此操作吗？',
+      '确认操作',
+      {
+        type: opType === 'all' || opType === 'upgrade' ? 'warning' : 'info',
+        confirmButtonText: '确认执行',
+        cancelButtonText: '取消',
+        closeOnClickModal: false,
+        closeOnPressEscape: true,
+      },
+    )
+    await executeOperate(opType)
   }
-  confirmVisible.value = true
+  catch {
+    // User cancelled.
+  }
 }
-
-const operations = [
-  { type: 'harvest', label: '收获', icon: '🌾', color: 'bg-[#5bb8f5] hover:bg-[#4aa8e5]' },
-  { type: 'clear', label: '一键务农', icon: '🌿', color: 'bg-[#4a8c3f] hover:bg-[#3a7c2f]' },
-  { type: 'plant', label: '种植', icon: '🌱', color: 'bg-[#6dbf5b] hover:bg-[#5daf4b]' },
-  { type: 'upgrade', label: '升级土地', icon: '⬆️', color: 'bg-[#a855f7] hover:bg-[#9333ea]' },
-  { type: 'all', label: '一键全收', icon: '⚡', color: 'bg-[#f0c040] hover:bg-[#e0b030] text-[#3d2b1f]' },
-]
 
 async function refresh() {
   if (currentAccountId.value) {
@@ -70,13 +85,11 @@ async function refresh() {
     if (!acc)
       return
 
-    if (!realtimeConnected.value) {
+    if (!realtimeConnected.value)
       await statusStore.fetchStatus(currentAccountId.value)
-    }
 
-    if (acc.running && status.value?.connection?.connected) {
+    if (acc.running && status.value?.connection?.connected)
       farmStore.fetchLands(currentAccountId.value)
-    }
   }
 }
 
@@ -86,8 +99,8 @@ watch(currentAccountId, () => {
 
 const { pause, resume } = useIntervalFn(() => {
   if (lands.value) {
-    lands.value = lands.value.map((l: any) =>
-      l.matureInSec > 0 ? { ...l, matureInSec: l.matureInSec - 1 } : l,
+    lands.value = lands.value.map((land: any) =>
+      land.matureInSec > 0 ? { ...land, matureInSec: land.matureInSec - 1 } : land,
     )
   }
 }, 1000)
@@ -107,108 +120,176 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="space-y-5">
-    <div class="cartoon-card farm-card rounded-2xl bg-white shadow-lg dark:bg-gray-800">
-      <!-- Header with Title and Actions -->
-      <div class="flex flex-col items-center justify-between gap-4 border-b border-gray-100 p-5 sm:flex-row dark:border-gray-700">
-        <h3 class="font-display flex items-center gap-2 text-xl font-bold">
-          🌾 土地详情
-        </h3>
-        <div class="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
-          <button
-            v-for="op in operations"
-            :key="op.type"
-            class="cartoon-btn flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm text-white transition disabled:cursor-not-allowed disabled:opacity-50"
-            :class="op.color"
-            :disabled="operating"
-            @click="handleOperate(op.type)"
-          >
-            <span>{{ op.icon }}</span>
-            {{ op.label }}
-          </button>
+  <section class="farm-console-panel">
+    <header class="farm-console-header">
+      <div class="farm-console-title">
+        <span class="title-icon i-carbon-crop-growth" />
+        <div>
+          <h2>土地详情</h2>
+          <p>查看作物状态并执行批量农场操作。</p>
         </div>
       </div>
 
-      <!-- Summary -->
-      <div class="flex flex-wrap gap-4 border-b border-gray-100 bg-gradient-to-r from-green-50 to-yellow-50 p-5 text-sm dark:border-gray-700 dark:bg-gray-900/50">
-        <div class="farm-card flex items-center gap-2 rounded-full bg-orange-100 px-4 py-1.5 text-orange-700 shadow-sm dark:bg-orange-900/30 dark:text-orange-400">
-          <span>🌾</span>
-          <div class="i-carbon-clean" />
-          <span class="font-body font-semibold">可收: {{ summary?.harvestable || 0 }}</span>
-        </div>
-        <div class="farm-card flex items-center gap-2 rounded-full bg-green-100 px-4 py-1.5 text-green-700 shadow-sm dark:bg-green-900/30 dark:text-green-400">
-          <span>🌿</span>
-          <div class="i-carbon-sprout" />
-          <span class="font-body font-semibold">生长: {{ summary?.growing || 0 }}</span>
-        </div>
-        <div class="farm-card flex items-center gap-2 rounded-full bg-gray-100 px-4 py-1.5 text-gray-700 shadow-sm dark:bg-gray-800 dark:text-gray-400">
-          <span>🟫</span>
-          <div class="i-carbon-checkbox" />
-          <span class="font-body font-semibold">空闲: {{ summary?.empty || 0 }}</span>
-        </div>
-        <div class="farm-card flex items-center gap-2 rounded-full bg-red-100 px-4 py-1.5 text-red-700 shadow-sm dark:bg-red-900/30 dark:text-red-400">
-          <span>🥀</span>
-          <div class="i-carbon-warning" />
-          <span class="font-body font-semibold">枯萎: {{ summary?.dead || 0 }}</span>
-        </div>
+      <div class="farm-console-actions">
+        <ElButton
+          v-for="op in operations"
+          :key="op.type"
+          :type="op.buttonType"
+          :plain="op.plain"
+          :loading="operating && activeOperation === op.type"
+          :disabled="operating"
+          @click="handleOperate(op.type)"
+        >
+          <span :class="op.icon" class="mr-1" />
+          {{ op.label }}
+        </ElButton>
       </div>
+    </header>
 
-      <!-- Grid -->
-      <div class="p-5">
-        <div v-if="loading || statusLoading" class="flex justify-center py-12">
-          <div class="i-svg-spinners-90-ring-with-bg text-4xl text-green-500" />
-        </div>
-
-        <div v-else-if="!currentAccountId" class="farm-card flex flex-col items-center justify-center gap-4 rounded-2xl bg-white p-12 text-center text-gray-500 shadow-md dark:bg-gray-800">
-          <div class="text-5xl">🧑‍🌾</div>
-          <div>
-            <div class="font-display text-lg text-gray-700 font-medium dark:text-gray-300">
-              未登录账号
-            </div>
-            <div class="font-body mt-1 text-sm text-gray-400">
-              请先添加农场账号开始种田吧!
-            </div>
-          </div>
-        </div>
-
-        <div v-else-if="!status?.connection?.connected" class="farm-card flex flex-col items-center justify-center gap-4 rounded-2xl bg-white p-12 text-center text-gray-500 shadow-md dark:bg-gray-800">
-          <div class="text-5xl">📡</div>
-          <div>
-            <div class="font-display text-lg text-gray-700 font-medium dark:text-gray-300">
-              账号未登录
-            </div>
-            <div class="font-body mt-1 text-sm text-gray-400">
-              请先运行账号或检查网络连接 🔄
-            </div>
-          </div>
-        </div>
-
-        <div v-else-if="!lands || lands.length === 0" class="flex flex-col items-center justify-center gap-4 py-16">
-          <div class="text-6xl">🌱🏡🌻</div>
-          <div class="font-display text-lg text-gray-500">
-            还没有种下作物哦~
-          </div>
-          <div class="font-body text-sm text-gray-400">
-            快去种下第一棵种子吧! 🧑‍🌾✨
-          </div>
-        </div>
-
-        <div v-else class="grid grid-cols-2 gap-4 lg:grid-cols-6 md:grid-cols-4 sm:grid-cols-3">
-          <LandCard
-            v-for="land in lands"
-            :key="land.id"
-            :land="land"
-          />
-        </div>
-      </div>
+    <div class="farm-summary-strip">
+      <ElTag
+        v-for="item in summaryItems"
+        :key="item.key"
+        :type="item.type"
+        effect="light"
+        round
+        size="large"
+      >
+        <span class="summary-tag">
+          <span :class="item.icon" />
+          <span>{{ item.label }}</span>
+          <strong>{{ summary?.[item.key] || 0 }}</strong>
+        </span>
+      </ElTag>
     </div>
 
-    <ConfirmModal
-      :show="confirmVisible"
-      :title="confirmConfig.title"
-      :message="confirmConfig.message"
-      @confirm="executeOperate"
-      @cancel="confirmVisible = false"
-    />
-  </div>
+    <div class="farm-grid-zone">
+      <div v-if="loading || statusLoading" class="farm-loading">
+        <span class="i-svg-spinners-90-ring-with-bg text-3xl" />
+      </div>
+
+      <ElEmpty v-else-if="!currentAccountId" description="请先添加或选择农场账号" />
+
+      <ElEmpty v-else-if="!status?.connection?.connected" description="账号未连接，请先运行账号或检查网络连接" />
+
+      <ElEmpty v-else-if="!lands || lands.length === 0" description="暂无土地数据" />
+
+      <div v-else class="land-grid">
+        <LandCard
+          v-for="land in lands"
+          :key="land.id"
+          :land="land"
+        />
+      </div>
+    </div>
+  </section>
 </template>
+
+<style scoped>
+.farm-console-panel {
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg);
+  background: var(--theme-surface);
+  overflow: hidden;
+}
+
+.farm-console-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--theme-border);
+  padding: 18px 20px;
+}
+
+.farm-console-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.title-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: var(--theme-radius-md);
+  background: var(--theme-primary-soft);
+  color: var(--theme-primary);
+  font-size: 18px;
+}
+
+.farm-console-title h2 {
+  margin: 0;
+  color: var(--theme-text);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.farm-console-title p {
+  margin: 2px 0 0;
+  color: var(--theme-text-muted);
+  font-size: 12px;
+}
+
+.farm-console-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.farm-console-actions :deep(.el-button) {
+  margin-left: 0;
+}
+
+.farm-summary-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  border-bottom: 1px solid var(--theme-border-subtle, var(--theme-border));
+  background: var(--theme-surface-soft);
+  padding: 12px 20px;
+}
+
+.summary-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.summary-tag strong {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px;
+}
+
+.farm-grid-zone {
+  padding: 20px;
+}
+
+.farm-loading {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  color: var(--theme-primary);
+}
+
+.land-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .farm-console-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .farm-console-actions {
+    justify-content: flex-start;
+  }
+}
+</style>

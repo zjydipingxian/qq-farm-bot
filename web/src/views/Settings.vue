@@ -1,5 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { useIntervalFn } from '@vueuse/core'
+import { ElMessageBox } from 'element-plus'
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, ref, watch, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
@@ -22,7 +23,7 @@ const settingStore = useSettingStore()
 const farmStore = useFarmStore()
 
 const activeTab = ref<'account' | 'strategy' | 'automation' | 'user'>(
-  (localStorage.getItem('settings-active-tab') as 'account' | 'strategy' | 'automation' | 'user') || 'account'
+  (localStorage.getItem('settings-active-tab') as 'account' | 'strategy' | 'automation' | 'user') || 'account',
 )
 
 watch(activeTab, (newTab) => {
@@ -30,10 +31,10 @@ watch(activeTab, (newTab) => {
 })
 
 const tabs = [
-  { key: 'account', label: '账号管理', icon: '👤' },
-  { key: 'strategy', label: '策略设置', icon: '⚙️' },
-  { key: 'automation', label: '自动控制', icon: '🔄' },
-  { key: 'user', label: '用户管理', icon: '👥' },
+  { key: 'account', label: '账号管理', icon: 'i-carbon-user-avatar' },
+  { key: 'strategy', label: '策略设置', icon: 'i-carbon-settings' },
+  { key: 'automation', label: '自动控制', icon: 'i-carbon-workflow-automation' },
+  { key: 'user', label: '用户管理', icon: 'i-carbon-user-multiple' },
 ] as const
 
 const modalVisible = ref(false)
@@ -58,11 +59,7 @@ function showAlert(message: string, type: 'primary' | 'danger' = 'primary') {
 const { accounts, loading: accountsLoading, currentAccountId } = storeToRefs(accountStore)
 
 const showModal = ref(false)
-const showDeleteConfirm = ref(false)
-const deleteLoading = ref(false)
 const editingAccount = ref<any>(null)
-const accountToDelete = ref<any>(null)
-const showClearStoppedConfirm = ref(false)
 const clearStoppedLoading = ref(false)
 
 const isAccountOpsDisabled = computed(() => !userStore.isAdmin && userStore.isExpired)
@@ -126,21 +123,20 @@ function openEditModal(account: any) {
 }
 
 async function handleDelete(account: any) {
-  accountToDelete.value = account
-  showDeleteConfirm.value = true
-}
-
-async function confirmDelete() {
-  if (accountToDelete.value) {
-    try {
-      deleteLoading.value = true
-      await accountStore.deleteAccount(accountToDelete.value.id)
-      accountToDelete.value = null
-      showDeleteConfirm.value = false
-    }
-    finally {
-      deleteLoading.value = false
-    }
+  const name = account?.name || account?.id
+  try {
+    await ElMessageBox.confirm(`确定要删除账号 ${name} 吗？`, '删除账号', {
+      type: 'error',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      closeOnClickModal: false,
+      customClass: 'admin-confirm-dialog',
+    })
+    await accountStore.deleteAccount(account.id)
+  }
+  catch (e) {
+    if (e !== 'cancel' && e !== 'close')
+      throw e
   }
 }
 
@@ -168,10 +164,24 @@ function openClearStoppedConfirm() {
     showAlert('没有已停止的账号需要清理', 'primary')
     return
   }
-  showClearStoppedConfirm.value = true
+  confirmClearStopped()
 }
 
 async function confirmClearStopped() {
+  try {
+    await ElMessageBox.confirm(`确定要清理 ${stoppedAccountsCount.value} 个已停止的账号吗？此操作不可恢复。`, '一键清理已停止账号', {
+      type: 'error',
+      confirmButtonText: '确认清理',
+      cancelButtonText: '取消',
+      closeOnClickModal: false,
+      customClass: 'admin-confirm-dialog',
+    })
+  }
+  catch (e) {
+    if (e === 'cancel' || e === 'close')
+      return
+    throw e
+  }
   clearStoppedLoading.value = true
   try {
     const stoppedIds = stoppedAccounts.value.map((acc: any) => acc.id)
@@ -185,7 +195,6 @@ async function confirmClearStopped() {
         console.error(`删除账号 ${id} 失败:`, e)
       }
     }
-    showClearStoppedConfirm.value = false
     showAlert(`成功清理 ${deletedCount} 个已停止的账号`, 'primary')
     await accountStore.fetchAccounts()
   }
@@ -358,10 +367,10 @@ watchEffect(() => {
 })
 
 const preferredSeedOptions = computed(() => {
-  const options: { label: string; value: number; disabled?: boolean }[] = [{ label: '自动选择', value: 0, disabled: false }]
+  const options: { label: string, value: number, disabled?: boolean }[] = [{ label: '自动选择', value: 0, disabled: false }]
   if (seeds.value) {
     options.push(...seeds.value.map(seed => ({
-      label: `${seed.requiredLevel}级 ${seed.name} (${seed.price}金)`,
+      label: `${String(seed.requiredLevel)}级 ${seed.name} (${seed.price}金币)`,
       value: seed.seedId,
       disabled: seed.locked || seed.soldOut,
     })))
@@ -391,7 +400,7 @@ watchEffect(async () => {
       if (preferredId > 0 && seeds.value) {
         const seed = seeds.value.find(s => s.seedId === preferredId)
         if (seed) {
-          strategyPreviewLabel.value = `${seed.requiredLevel}级 ${seed.name}`
+          strategyPreviewLabel.value = `${String(seed.requiredLevel)}级 ${seed.name}`
         }
         else {
           strategyPreviewLabel.value = '未选择优先种子'
@@ -414,7 +423,7 @@ watchEffect(async () => {
   }
   if (strategy === 'level') {
     const best = [...available].sort((a, b) => b.requiredLevel - a.requiredLevel)[0]
-    strategyPreviewLabel.value = best ? `${best.requiredLevel}级 ${best.name}` : null
+    strategyPreviewLabel.value = best ? `${String(best.requiredLevel)}级 ${best.name}` : null
     return
   }
   const sortBy = analyticsSortByMap[strategy]
@@ -426,7 +435,7 @@ watchEffect(async () => {
       const match = rankings.find(r => availableIds.has(Number(r.seedId)))
       if (match) {
         const seed = available.find(s => s.seedId === Number(match.seedId))
-        strategyPreviewLabel.value = seed ? `${seed.requiredLevel}级 ${seed.name}` : null
+        strategyPreviewLabel.value = seed ? `${String(seed.requiredLevel)}级 ${seed.name}` : null
       }
       else {
         strategyPreviewLabel.value = '暂无匹配种子'
@@ -470,6 +479,7 @@ async function saveStrategySettings() {
     const fullSettings = {
       ...settings.value,
       ...localStrategySettings.value,
+      // eslint-disable-next-line ts/no-use-before-define
       automation: localAutomationSettings.value.automation,
     }
     const res = await settingStore.saveSettings(currentAccountId.value, fullSettings)
@@ -689,6 +699,11 @@ const localOffline = ref({
   title: '',
   msg: '',
   offlineDeleteSec: 0,
+  autoReconnectEnabled: false,
+  reconnectDelaySec: 60,
+  reconnectCodeEndpoint: 'http://211.154.25.123:28999/api/open/v1/farm/code',
+  reconnectApiToken: '',
+  reconnectOpenid: '',
 })
 
 const channelOptions = [
@@ -708,14 +723,14 @@ const channelOptions = [
   { label: 'Telegram', value: 'telegram' },
   { label: '飞书', value: 'feishu' },
   { label: 'IFTTT', value: 'ifttt' },
-  { label: '企业微信群机器人', value: 'wecombot' },
+  { label: '企业微信机器人', value: 'wecombot' },
   { label: 'Discord', value: 'discord' },
   { label: 'WxPusher', value: 'wxpusher' },
 ]
 
 const reloginUrlModeOptions = [
-  { label: '不需要', value: 'none' },
-  { label: 'QQ直链', value: 'qq_link' },
+  { label: '不需重新登录', value: 'none' },
+  { label: 'QQ 直链', value: 'qq_link' },
   { label: '二维码链接', value: 'qr_link' },
 ]
 
@@ -755,7 +770,10 @@ function openChannelDocs() {
 
 function syncLocalOfflineSettings() {
   if (settings.value?.offlineReminder) {
-    localOffline.value = JSON.parse(JSON.stringify(settings.value.offlineReminder))
+    localOffline.value = {
+      ...localOffline.value,
+      ...JSON.parse(JSON.stringify(settings.value.offlineReminder)),
+    }
   }
 }
 
@@ -765,7 +783,7 @@ watch(settings, () => {
 
 async function handleChangePassword() {
   if (!passwordForm.value.old || !passwordForm.value.new) {
-    showAlert('请填写完整', 'danger')
+    showAlert('请填写完整的密码', 'danger')
     return
   }
   if (passwordForm.value.new !== passwordForm.value.confirm) {
@@ -844,26 +862,23 @@ async function handleTestOffline() {
       </h1>
     </div>
 
-    <div class="farm-card border border-gray-200 rounded-2xl bg-white shadow-md dark:border-gray-700 dark:bg-gray-800">
-      <div class="border-b border-gray-200 dark:border-gray-700">
-        <nav class="flex gap-1 p-2">
-          <button
-            v-for="tab in tabs"
-            :key="tab.key"
-            class="cartoon-btn flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all"
-            :class="activeTab === tab.key
-              ? 'text-white shadow-sm'
-              : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'"
-            :style="activeTab === tab.key ? { backgroundColor: 'var(--theme-primary)' } : {}"
-            @click="activeTab = tab.key"
-          >
-            <div :class="tab.icon" />
-            {{ tab.label }}
-          </button>
-        </nav>
-      </div>
+    <ElCard class="settings-card" shadow="never">
+      <ElTabs v-model="activeTab" class="settings-tabs">
+        <ElTabPane
+          v-for="tab in tabs"
+          :key="tab.key"
+          :name="tab.key"
+        >
+          <template #label>
+            <span class="settings-tab-label">
+              <span :class="tab.icon" />
+              <span>{{ tab.label }}</span>
+            </span>
+          </template>
+        </ElTabPane>
+      </ElTabs>
 
-      <div class="p-4">
+      <div class="settings-tab-body">
         <!-- 账号管理 -->
         <div v-if="activeTab === 'account'" class="space-y-4">
           <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -878,7 +893,7 @@ async function handleTestOffline() {
                 :disabled="stoppedAccountsCount === 0"
                 @click="openClearStoppedConfirm"
               >
-                <span class="mr-2">🗑️</span>
+                <span class="i-carbon-trash-can mr-1" />
                 <span class="hidden sm:inline">一键清理</span>
                 <span class="sm:hidden">清理</span>
                 ({{ stoppedAccountsCount }})
@@ -890,19 +905,21 @@ async function handleTestOffline() {
                 :title="addAccountDisabledReason"
                 @click="openAddModal"
               >
-                <span class="mr-2">➕</span>
+                <span class="i-carbon-add mr-1" />
                 添加账号
               </BaseButton>
             </div>
           </div>
 
           <div v-if="accountsLoading && accounts.length === 0" class="py-8 text-center text-gray-500">
-            <span class="mb-2 inline-block text-2xl animate-spin">⏳</span>
+            <span class="i-svg-spinners-180-ring-with-bg mb-2 inline-block text-2xl" />
             <div>加载中...</div>
           </div>
 
           <div v-else-if="accounts.length === 0" class="farm-card rounded-2xl bg-white py-12 text-center shadow-md dark:bg-gray-800">
-            <div class="mb-4 inline-block text-4xl text-gray-400">👤</div>
+            <div class="settings-empty-icon">
+              <span class="i-carbon-user-avatar" />
+            </div>
             <p class="mb-4 text-gray-500">
               暂无账号
             </p>
@@ -917,11 +934,11 @@ async function handleTestOffline() {
             </BaseButton>
           </div>
 
-          <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div v-else class="grid grid-cols-1 gap-4 lg:grid-cols-3 sm:grid-cols-2 xl:grid-cols-4">
             <div
               v-for="acc in accounts"
               :key="acc.id"
-              class="cartoon-card cursor-pointer border rounded-2xl bg-white p-3 shadow-md transition-all duration-200 dark:bg-gray-800 sm:p-4"
+              class="cursor-pointer border cartoon-card rounded-2xl bg-white p-3 shadow-md transition-all duration-200 dark:bg-gray-800 sm:p-4"
               :class="String(currentAccountId) === String(acc.id)
                 ? 'ring-2'
                 : 'border-transparent'"
@@ -931,10 +948,10 @@ async function handleTestOffline() {
               @click="selectAccount(acc)"
             >
               <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                <div class="flex min-w-0 flex-1 items-center gap-3">
-                  <div class="h-10 w-10 flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700 sm:h-12 sm:w-12">
+                <div class="min-w-0 flex flex-1 items-center gap-3">
+                  <div class="h-10 w-10 flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100 sm:h-12 sm:w-12 dark:bg-gray-700">
                     <img v-if="acc.uin" :src="`https://q1.qlogo.cn/g?b=qq&nk=${acc.uin}&s=100`" class="h-full w-full object-cover">
-                    <span v-else class="text-xl text-gray-400 sm:text-2xl">👤</span>
+                    <span v-else class="i-carbon-user-avatar text-xl text-gray-400 sm:text-2xl" />
                   </div>
                   <div class="min-w-0 flex-1">
                     <h4 class="truncate text-base font-bold sm:text-lg">
@@ -962,19 +979,19 @@ async function handleTestOffline() {
                   <BaseButton
                     variant="secondary"
                     size="sm"
-                    class="border rounded-full shadow-sm transition-all duration-500 ease-in-out active:scale-95 sm:w-20"
+                    class="border rounded-full shadow-sm transition-all duration-500 ease-in-out sm:w-20 active:scale-95"
                     :class="acc.running ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100 focus:ring-red-500 active:border-red-300 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 dark:focus:ring-red-500 dark:active:border-red-700' : 'border-green-200 bg-green-50 text-green-600 hover:bg-green-100 focus:ring-green-500 active:border-green-300 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 dark:focus:ring-green-500 dark:active:border-green-700'"
                     :disabled="!acc.running && isAccountOpsDisabled"
                     :title="!acc.running && isAccountOpsDisabled ? '账号已到期，无法启动账号' : ''"
                     @click="toggleAccount(acc)"
                   >
-                    <span class="mr-1">{{ acc.running ? '⏹️' : '▶️' }}</span>
+                    <span class="mr-1">{{ acc.running ? '■' : '▶' }}</span>
                     {{ acc.running ? '停止' : '启动' }}
                   </BaseButton>
                 </div>
               </div>
 
-              <div class="mt-3 flex items-center justify-between border-t border-gray-100 pt-3 dark:border-gray-700 sm:mt-4 sm:pt-4">
+              <div class="mt-3 flex items-center justify-between border-t border-gray-100 pt-3 sm:mt-4 dark:border-gray-700 sm:pt-4">
                 <div class="hidden items-center gap-2 text-sm text-gray-500 sm:flex">
                   <span class="flex items-center gap-1">
                     <div class="h-2 w-2 rounded-full" :class="acc.running ? 'bg-green-500' : 'bg-gray-300'" />
@@ -989,7 +1006,7 @@ async function handleTestOffline() {
                     title="设置"
                     @click="openSettings(acc)"
                   >
-                    ⚙️
+                    <span class="i-carbon-settings" />
                   </BaseButton>
                   <BaseButton
                     variant="ghost"
@@ -997,15 +1014,15 @@ async function handleTestOffline() {
                     title="编辑"
                     @click="openEditModal(acc)"
                   >
-                    ✏️
+                    <span class="i-carbon-edit" />
                   </BaseButton>
                   <BaseButton
                     variant="ghost"
-                    class="text-red-500 min-h-[36px] min-w-[36px] !p-2 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300"
+                    class="min-h-[36px] min-w-[36px] text-red-500 !p-2 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300"
                     title="删除"
                     @click="handleDelete(acc)"
                   >
-                    🗑️
+                    <span class="i-carbon-trash-can" />
                   </BaseButton>
                 </div>
               </div>
@@ -1017,30 +1034,6 @@ async function handleTestOffline() {
             :edit-data="editingAccount"
             @close="showModal = false"
             @saved="handleSaved"
-          />
-
-          <ConfirmModal
-            :show="showDeleteConfirm"
-            :loading="deleteLoading"
-            title="删除账号"
-            :message="accountToDelete ? `确定要删除账号 ${accountToDelete.name || accountToDelete.id} 吗?` : ''"
-            confirm-text="删除"
-            type="danger"
-            @close="!deleteLoading && (showDeleteConfirm = false)"
-            @cancel="!deleteLoading && (showDeleteConfirm = false)"
-            @confirm="confirmDelete"
-          />
-
-          <ConfirmModal
-            :show="showClearStoppedConfirm"
-            :loading="clearStoppedLoading"
-            title="一键清理已停止账号"
-            :message="`确定要清理 ${stoppedAccountsCount} 个已停止的账号吗？此操作不可恢复！`"
-            confirm-text="确认清理"
-            type="danger"
-            @close="!clearStoppedLoading && (showClearStoppedConfirm = false)"
-            @cancel="!clearStoppedLoading && (showClearStoppedConfirm = false)"
-            @confirm="confirmClearStopped"
           />
         </div>
 
@@ -1057,12 +1050,14 @@ async function handleTestOffline() {
           </div>
 
           <div v-if="settingsLoading" class="py-4 text-center text-gray-500">
-            <span class="mx-auto mb-2 text-2xl animate-spin inline-block">⏳</span>
+            <span class="i-svg-spinners-180-ring-with-bg mx-auto mb-2 inline-block text-2xl" />
             <p>加载中...</p>
           </div>
 
           <div v-else-if="!currentAccountId" class="py-8 text-center text-gray-500">
-            <div class="mx-auto mb-2 text-3xl text-gray-400">⚙️</div>
+            <div class="settings-empty-icon settings-empty-icon--small">
+              <span class="i-carbon-settings" />
+            </div>
             <p>请先选择账号</p>
           </div>
 
@@ -1093,7 +1088,7 @@ async function handleTestOffline() {
                   class="w-full flex items-center justify-between border border-gray-200 rounded-lg bg-gray-50 px-3 py-2 text-gray-500 dark:border-gray-600 dark:bg-gray-800/50 dark:text-gray-400"
                 >
                   <span class="truncate">{{ strategyPreviewLabel ?? '加载中...' }}</span>
-                  <span class="shrink-0 text-lg text-gray-400">▼</span>
+                  <span class="shrink-0 text-lg text-gray-400 i-carbon-leaf" />
                 </div>
               </div>
             </div>
@@ -1111,14 +1106,14 @@ async function handleTestOffline() {
                       背包种子优先顺序
                     </div>
                     <p class="mt-1 text-xs text-amber-700/90 dark:text-amber-300/90">
-                      先按下方顺序消耗背包中的 1x1 种子；背包种子不足时，再按"第二优先策略"补种。
+                      先按下方顺序消耗背包中的 1x1 种子；背包种子不足时，按第二优先策略"补种"
                     </p>
                   </div>
                   <button
-                    class="rounded bg-amber-100 px-2 py-1 text-xs text-amber-700 transition hover:bg-amber-200 dark:bg-amber-900/50 dark:text-amber-300 dark:hover:bg-amber-900/70"
+                    class="rounded bg-amber-100 px-2 py-1 text-xs text-amber-700 transition dark:bg-amber-900/50 hover:bg-amber-200 dark:text-amber-300 dark:hover:bg-amber-900/70"
                     @click="resetBagSeedPriority"
                   >
-                    重置顺序
+                    重置默认顺序
                   </button>
                 </div>
                 <div v-if="bagSeedsLoading" class="py-4 text-center text-sm text-amber-700 dark:text-amber-300">
@@ -1134,7 +1129,7 @@ async function handleTestOffline() {
                   <div
                     v-for="(seed, index) in sortedBagSeeds"
                     :key="seed.seedId"
-                    class="cartoon-card flex items-center gap-2 border border-amber-200 rounded-xl bg-white p-2 dark:border-amber-700/50 dark:bg-gray-800"
+                    class="flex items-center gap-2 border cartoon-card border-amber-200 rounded-xl bg-white p-2 dark:border-amber-700/50 dark:bg-gray-800"
                     draggable="true"
                     @dragstart="startBagSeedDrag(seed.seedId, $event)"
                     @dragover.prevent="dragOverBagSeed(seed.seedId, $event)"
@@ -1157,14 +1152,14 @@ async function handleTestOffline() {
                         :disabled="index === 0"
                         @click="moveBagSeed(seed.seedId, -1)"
                       >
-                        <span class="text-sm">▲</span>
+                        <span class="text-sm i-carbon-chevron-up" />
                       </button>
                       <button
                         class="rounded p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700"
                         :disabled="index === sortedBagSeeds.length - 1"
                         @click="moveBagSeed(seed.seedId, 1)"
                       >
-                        <span class="text-sm">▼</span>
+                        <span class="text-sm i-carbon-chevron-down" />
                       </button>
                     </div>
                   </div>
@@ -1175,13 +1170,13 @@ async function handleTestOffline() {
             <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
               <BaseInput
                 v-model.number="localStrategySettings.intervals.farmMin"
-                label="农场巡查最小 (秒)"
+                label="农场巡查最少 (秒)"
                 type="number"
                 min="1"
               />
               <BaseInput
                 v-model.number="localStrategySettings.intervals.farmMax"
-                label="农场巡查最大 (秒)"
+                label="农场巡查最多 (秒)"
                 type="number"
                 min="1"
               />
@@ -1190,13 +1185,13 @@ async function handleTestOffline() {
             <div class="grid grid-cols-2 gap-3 md:grid-cols-2">
               <BaseInput
                 v-model.number="localStrategySettings.intervals.helpMin"
-                label="帮助巡查最小 (秒)"
+                label="帮助巡查最少 (秒)"
                 type="number"
                 min="1"
               />
               <BaseInput
                 v-model.number="localStrategySettings.intervals.helpMax"
-                label="帮助巡查最大 (秒)"
+                label="帮助巡查最多 (秒)"
                 type="number"
                 min="1"
               />
@@ -1205,13 +1200,13 @@ async function handleTestOffline() {
             <div class="grid grid-cols-2 gap-3 md:grid-cols-2">
               <BaseInput
                 v-model.number="localStrategySettings.intervals.stealMin"
-                label="偷菜巡查最小 (秒)"
+                label="偷菜巡查最少 (秒)"
                 type="number"
                 min="1"
               />
               <BaseInput
                 v-model.number="localStrategySettings.intervals.stealMax"
-                label="偷菜巡查最大 (秒)"
+                label="偷菜巡查最多 (秒)"
                 type="number"
                 min="1"
               />
@@ -1288,12 +1283,14 @@ async function handleTestOffline() {
           </div>
 
           <div v-if="settingsLoading" class="py-4 text-center text-gray-500">
-            <span class="mx-auto mb-2 text-2xl animate-spin inline-block">⏳</span>
+            <span class="i-svg-spinners-180-ring-with-bg mx-auto mb-2 inline-block text-2xl" />
             <p>加载中...</p>
           </div>
 
           <div v-else-if="!currentAccountId" class="py-8 text-center text-gray-500">
-            <div class="mx-auto mb-2 text-3xl text-gray-400">⚙️</div>
+            <div class="settings-empty-icon settings-empty-icon--small">
+              <span class="i-carbon-settings" />
+            </div>
             <p>请先选择账号</p>
           </div>
 
@@ -1306,65 +1303,69 @@ async function handleTestOffline() {
               <BaseSwitch v-model="localAutomationSettings.automation.farm_push" label="推送触发巡田" />
               <BaseSwitch v-model="localAutomationSettings.automation.land_upgrade" label="自动升级土地" />
               <BaseSwitch v-model="localAutomationSettings.automation.fertilizer_gift" label="自动填充化肥" />
-            <BaseSwitch v-model="localAutomationSettings.automation.fertilizer_buy_organic" label="自动购买有机化肥" />
-            <BaseSwitch v-model="localAutomationSettings.automation.fertilizer_buy_normal" label="自动购买无机化肥" />
-            <BaseSwitch v-model="localAutomationSettings.automation.skip_own_weed_bug" label="巡田时跳过一键务农" />
-          </div>
+              <BaseSwitch v-model="localAutomationSettings.automation.fertilizer_buy_organic" label="自动购买有机化肥" />
+              <BaseSwitch v-model="localAutomationSettings.automation.fertilizer_buy_normal" label="自动购买无机化肥" />
+              <BaseSwitch v-model="localAutomationSettings.automation.skip_own_weed_bug" label="巡田时跳过一键除草" />
+            </div>
 
-          <div v-if="localAutomationSettings.automation.fertilizer_buy_organic || localAutomationSettings.automation.fertilizer_buy_normal" class="space-y-3 rounded bg-green-50 p-3 text-sm dark:bg-green-900/20">
-            <div v-if="localAutomationSettings.automation.fertilizer_buy_organic" class="space-y-2">
-              <div class="font-medium text-green-700 dark:text-green-400">有机化肥设置</div>
+            <div v-if="localAutomationSettings.automation.fertilizer_buy_organic || localAutomationSettings.automation.fertilizer_buy_normal" class="rounded bg-green-50 p-3 text-sm space-y-3 dark:bg-green-900/20">
+              <div v-if="localAutomationSettings.automation.fertilizer_buy_organic" class="space-y-2">
+                <div class="text-green-700 font-medium dark:text-green-400">
+                  有机化肥设置
+                </div>
+                <div class="flex flex-wrap gap-4">
+                  <BaseInput
+                    v-model.number="localAutomationSettings.fertilizerBuyOrganicCount"
+                    label="购买数量"
+                    type="number"
+                    min="1"
+                    max="10000"
+                  />
+                  <BaseInput
+                    v-model.number="localAutomationSettings.fertilizerBuyOrganicThresholdHours"
+                    label="触发阈值 (小时)"
+                    type="number"
+                    min="1"
+                    max="990"
+                  />
+                </div>
+              </div>
+              <div v-if="localAutomationSettings.automation.fertilizer_buy_normal" class="space-y-2">
+                <div class="text-green-700 font-medium dark:text-green-400">
+                  无机化肥设置
+                </div>
+                <div class="flex flex-wrap gap-4">
+                  <BaseInput
+                    v-model.number="localAutomationSettings.fertilizerBuyNormalCount"
+                    label="购买数量"
+                    type="number"
+                    min="1"
+                    max="10000"
+                  />
+                  <BaseInput
+                    v-model.number="localAutomationSettings.fertilizerBuyNormalThresholdHours"
+                    label="触发阈值 (小时)"
+                    type="number"
+                    min="1"
+                    max="990"
+                  />
+                </div>
+              </div>
               <div class="flex flex-wrap gap-4">
                 <BaseInput
-                  v-model.number="localAutomationSettings.fertilizerBuyOrganicCount"
-                  label="购买数量"
+                  v-model.number="localAutomationSettings.fertilizerBuyCheckIntervalMinutes"
+                  label="检测间隔 (分钟)"
                   type="number"
                   min="1"
-                  max="10000"
-                />
-                <BaseInput
-                  v-model.number="localAutomationSettings.fertilizerBuyOrganicThresholdHours"
-                  label="触发阈值 (小时)"
-                  type="number"
-                  min="1"
-                  max="990"
+                  max="1440"
                 />
               </div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                系统会按照设定的检测间隔定时检测化肥容器剩余量，当低于触发阈值时自动购买。保存设置后会立即检测一次。同时开启两种化肥购买时，优先购买有机化肥。
+              </p>
             </div>
-            <div v-if="localAutomationSettings.automation.fertilizer_buy_normal" class="space-y-2">
-              <div class="font-medium text-green-700 dark:text-green-400">无机化肥设置</div>
-              <div class="flex flex-wrap gap-4">
-                <BaseInput
-                  v-model.number="localAutomationSettings.fertilizerBuyNormalCount"
-                  label="购买数量"
-                  type="number"
-                  min="1"
-                  max="10000"
-                />
-                <BaseInput
-                  v-model.number="localAutomationSettings.fertilizerBuyNormalThresholdHours"
-                  label="触发阈值 (小时)"
-                  type="number"
-                  min="1"
-                  max="990"
-                />
-              </div>
-            </div>
-            <div class="flex flex-wrap gap-4">
-              <BaseInput
-                v-model.number="localAutomationSettings.fertilizerBuyCheckIntervalMinutes"
-                label="检测间隔 (分钟)"
-                type="number"
-                min="1"
-                max="1440"
-              />
-            </div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">
-              系统会按照设定的检测间隔定时检测化肥容器剩余量，当低于触发阈值时自动购买。保存设置后会立即检测一次。同时开启两种化肥购买时，优先购买有机化肥。
-            </p>
-          </div>
 
-          <div v-if="localAutomationSettings.automation.friend" class="flex flex-wrap gap-4 rounded bg-blue-50 p-3 text-sm dark:bg-blue-900/20">
+            <div v-if="localAutomationSettings.automation.friend" class="flex flex-wrap gap-4 rounded bg-blue-50 p-3 text-sm dark:bg-blue-900/20">
               <BaseSwitch v-model="localAutomationSettings.automation.friend_steal" label="自动偷菜" />
               <BaseSwitch v-model="localAutomationSettings.automation.friend_help" label="自动帮忙" />
               <BaseSwitch v-model="localAutomationSettings.automation.friend_bad" label="自动捣乱" />
@@ -1405,7 +1406,7 @@ async function handleTestOffline() {
               <div class="flex items-center gap-4">
                 <BaseSwitch
                   v-model="localAutomationSettings.automation.fertilizer_multi_season"
-                  label="多季补肥"
+                  label="多季作物施肥"
                 />
               </div>
 
@@ -1419,8 +1420,8 @@ async function handleTestOffline() {
                   class="w-40"
                 />
                 <span class="flex items-end pb-2 text-xs text-gray-500 dark:text-gray-400">
-                  距离成熟时间 ≤ 此秒数时施有机肥（默认300秒=5分钟）
-                </span>
+                  距成熟时间 ≤ 此秒数时施有机肥（默认 300 秒 = 5 分钟）
+                </span>  
               </div>
             </div>
 
@@ -1444,7 +1445,7 @@ async function handleTestOffline() {
           </h3>
 
           <div class="space-y-4">
-            <div class="farm-card border border-gray-200 rounded-2xl bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800">
+            <div class="border farm-card border-gray-200 rounded-2xl bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800">
               <h4 class="mb-3 flex items-center gap-2 text-base text-gray-900 font-bold dark:text-gray-100">
                 🔑 修改用户密码
               </h4>
@@ -1484,7 +1485,7 @@ async function handleTestOffline() {
               </div>
             </div>
 
-            <div class="farm-card border border-gray-200 rounded-2xl bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800">
+            <div class="border farm-card border-gray-200 rounded-2xl bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800">
               <h4 class="mb-3 flex items-center gap-2 text-base text-gray-900 font-bold dark:text-gray-100">
                 🔔 下线提醒
               </h4>
@@ -1500,7 +1501,7 @@ async function handleTestOffline() {
                         :disabled="!currentChannelDocUrl"
                         @click="openChannelDocs"
                       >
-                        官网
+                        查看教程
                       </BaseButton>
                     </div>
                     <BaseSelect
@@ -1551,6 +1552,67 @@ async function handleTestOffline() {
                   type="text"
                   placeholder="提醒内容"
                 />
+
+                <div class="rounded-xl border border-blue-100 bg-blue-50/50 p-4 dark:border-blue-900/50 dark:bg-blue-950/20">
+                  <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <h5 class="text-sm text-gray-900 font-bold dark:text-gray-100">
+                        自动重连
+                      </h5>
+                      <p class="mt-1 text-xs text-gray-500 leading-5 dark:text-gray-400">
+                        当账号被踢下线或 WebSocket 返回 400 时，自动请求新 Code 并重启原账号。
+                      </p>
+                    </div>
+                    <BaseSwitch
+                      v-model="localOffline.autoReconnectEnabled"
+                      label="开启自动重连"
+                    />
+                  </div>
+
+                  <div
+                    v-show="localOffline.autoReconnectEnabled"
+                    class="mt-4 space-y-3 border-t border-blue-100 pt-4 dark:border-blue-900/50"
+                  >
+                    <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <BaseInput
+                        v-model.number="localOffline.reconnectDelaySec"
+                        label="重连等待时间 (秒)"
+                        type="number"
+                        min="0"
+                        placeholder="默认 60 秒"
+                      />
+                      <BaseInput
+                        v-model="localOffline.reconnectCodeEndpoint"
+                        label="获取 Code 接口地址"
+                        type="text"
+                        placeholder="http://host/api/open/v1/farm/code"
+                      />
+                    </div>
+                    <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <BaseInput
+                        v-model="localOffline.reconnectApiToken"
+                        label="API Token"
+                        type="password"
+                        placeholder="Bearer token，不需要填写 Bearer 前缀"
+                      />
+                      <BaseInput
+                        v-model="localOffline.reconnectOpenid"
+                        label="OpenID"
+                        type="text"
+                        placeholder="用于获取 Code 的 openid"
+                      />
+                    </div>
+                    <ElAlert
+                      type="info"
+                      :closable="false"
+                      show-icon
+                    >
+                      <template #title>
+                        自动重连默认关闭；触发后会先等待设定时间，再获取有效 Code 覆盖原账号 Code，失败不会覆盖旧值。
+                      </template>
+                    </ElAlert>
+                  </div>
+                </div>
               </div>
 
               <div class="mt-4 flex justify-end gap-2 border-t pt-3 dark:border-gray-700">
@@ -1577,7 +1639,7 @@ async function handleTestOffline() {
           </div>
         </div>
       </div>
-    </div>
+    </ElCard>
 
     <ConfirmModal
       :show="modalVisible"
@@ -1591,3 +1653,132 @@ async function handleTestOffline() {
     />
   </div>
 </template>
+
+<style scoped>
+.settings-page {
+  --settings-panel-border: color-mix(in srgb, var(--theme-border) 82%, transparent);
+  --settings-panel-bg: var(--theme-surface);
+}
+
+.settings-card {
+  border: 1px solid var(--settings-panel-border);
+  border-radius: 8px;
+  background: var(--theme-surface);
+  box-shadow: none;
+}
+
+.settings-card :deep(.el-card__body) {
+  padding: 0;
+}
+
+.settings-tabs {
+  --el-tabs-header-height: 48px;
+}
+
+.settings-tabs :deep(.el-tabs__header) {
+  margin: 0;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--settings-panel-border);
+}
+
+.settings-tabs :deep(.el-tabs__nav-wrap::after) {
+  display: none;
+}
+
+.settings-tabs :deep(.el-tabs__item) {
+  padding: 0 18px;
+  color: var(--theme-text-secondary);
+  font-weight: 600;
+}
+
+.settings-tabs :deep(.el-tabs__item.is-active) {
+  color: var(--theme-primary);
+}
+
+.settings-tabs :deep(.el-tabs__active-bar) {
+  height: 3px;
+  border-radius: 999px 999px 0 0;
+  background: var(--theme-primary);
+}
+
+.settings-tabs :deep(.el-tabs__content) {
+  display: none;
+}
+
+.settings-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-tab-label > span:first-child {
+  width: 16px;
+  height: 16px;
+}
+
+.settings-tab-body {
+  padding: 20px 24px 24px;
+}
+
+.settings-empty-icon {
+  display: inline-flex;
+  width: 48px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  border: 1px solid var(--settings-panel-border);
+  border-radius: 999px;
+  color: var(--theme-text-secondary);
+  background: color-mix(in srgb, var(--theme-primary) 8%, var(--theme-surface));
+  font-size: 24px;
+}
+
+.settings-empty-icon--small {
+  width: 40px;
+  height: 40px;
+  margin-right: auto;
+  margin-left: auto;
+  font-size: 20px;
+}
+
+.settings-page :deep(.farm-card),
+.settings-page :deep(.cartoon-card) {
+  border: 1px solid var(--settings-panel-border);
+  border-radius: 8px;
+  background: var(--settings-panel-bg);
+  box-shadow: none;
+}
+
+.settings-page :deep(.cartoon-card:hover) {
+  border-color: color-mix(in srgb, var(--theme-primary) 42%, var(--theme-border));
+  box-shadow: 0 8px 24px rgb(15 23 42 / 8%);
+  transform: translateY(-1px);
+}
+
+.settings-page :deep(.cartoon-btn) {
+  border-radius: 6px;
+  box-shadow: none;
+  transform: none;
+}
+
+.settings-page :deep(input),
+.settings-page :deep(textarea),
+.settings-page :deep(select) {
+  border-radius: 6px;
+}
+
+@media (max-width: 768px) {
+  .settings-tabs :deep(.el-tabs__header) {
+    padding: 0 12px;
+  }
+
+  .settings-tabs :deep(.el-tabs__item) {
+    padding: 0 12px;
+  }
+
+  .settings-tab-body {
+    padding: 16px 14px 18px;
+  }
+}
+</style>

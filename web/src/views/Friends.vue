@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { useIntervalFn } from '@vueuse/core'
+import { ElMessageBox } from 'element-plus'
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, ref, watch } from 'vue'
 import api from '@/api'
-import ConfirmModal from '@/components/ConfirmModal.vue'
 import LandCard from '@/components/LandCard.vue'
 import { useAccountStore } from '@/stores/account'
 import { useFriendStore } from '@/stores/friend'
@@ -44,6 +44,8 @@ const knownFriendGidCount = computed(() => knownFriendGids.value.length)
 const knownFriendGidSet = computed(() => new Set(knownFriendGids.value.map(Number)))
 const friendGidSet = computed(() => new Set(friends.value.map(f => Number(f.gid))))
 const blacklistGidSet = computed(() => new Set(blacklist.value.map(item => Number(item.gid))))
+const showGidListModal = ref(false)
+const gidSearchKeyword = ref('')
 
 const filteredKnownFriendGids = computed(() => {
   const keyword = gidSearchKeyword.value.trim().toLowerCase()
@@ -85,27 +87,21 @@ function openGidListModal() {
 }
 
 const TABS = [
-  { key: 'friends', label: '好友列表', icon: '👥' },
-  { key: 'blacklist', label: '好友黑名单', icon: '🚫' },
-  { key: 'visitors', label: '最近访客', icon: '👀' },
+  { key: 'friends', label: '好友列表', icon: 'i-carbon-user-multiple' },
+  { key: 'blacklist', label: '好友黑名单', icon: 'i-carbon-warning' },
+  { key: 'visitors', label: '最近访客', icon: 'i-carbon-view' },
 ] as const
 
 type TabKey = typeof TABS[number]['key']
 
 const activeTab = ref<TabKey>('friends')
 
-const showConfirm = ref(false)
-const confirmMessage = ref('')
-const confirmLoading = ref(false)
-const pendingAction = ref<(() => Promise<any>) | null>(null)
 const avatarErrorKeys = ref<Set<string>>(new Set())
 const searchKeyword = ref('')
 const localKnownFriendGidSyncCooldownSec = ref(300)
 const localFriendsListCacheTtlSec = ref(60)
 const showBatchAddGidModal = ref(false)
 const batchGidInput = ref('')
-const showGidListModal = ref(false)
-const gidSearchKeyword = ref('')
 
 const interactFilter = ref('all')
 const interactFilters = [
@@ -115,29 +111,23 @@ const interactFilters = [
   { key: 'bad', label: '捣乱' },
 ]
 
-function confirmAction(msg: string, action: () => Promise<any>) {
-  confirmMessage.value = msg
-  pendingAction.value = action
-  showConfirm.value = true
-}
-
-async function onConfirm() {
-  if (pendingAction.value) {
-    try {
-      confirmLoading.value = true
-      await pendingAction.value()
-    }
-    catch (e: any) {
-      toast.error(e?.message || '操作失败')
-    }
-    finally {
-      confirmLoading.value = false
-      pendingAction.value = null
-      showConfirm.value = false
-    }
+async function confirmAction(message: string, action: () => Promise<any>, type: 'warning' | 'error' = 'warning') {
+  try {
+    await ElMessageBox.confirm(message, '确认操作', {
+      type,
+      confirmButtonText: '确认',
+      cancelButtonText: '取消',
+      closeOnClickModal: false,
+      closeOnPressEscape: true,
+      distinguishCancelAndClose: true,
+      customClass: 'admin-confirm-dialog',
+    })
+    await action()
   }
-  else {
-    showConfirm.value = false
+  catch (e: any) {
+    if (e === 'cancel' || e === 'close')
+      return
+    toast.error(e?.message || '操作失败')
   }
 }
 
@@ -278,14 +268,14 @@ async function handleOp(friendId: string, type: string, e: Event) {
   }
 
   if (type === 'bad') {
-    confirmAction('确定对好友执行捣乱操作吗?', async () => {
+    await confirmAction('确定对好友执行捣乱操作吗?', async () => {
       toast.info('已在捣乱中，间隔较长，请稍后返回好友土地查看')
       friendStore.operate(currentAccountId.value!, friendId, type)
       return { ok: true }
-    })
+    }, 'error')
   }
   else {
-    confirmAction(`确定对好友执行${opNames[type] || type}操作吗?`, async () => {
+    await confirmAction(`确定对好友执行${opNames[type] || type}操作吗?`, async () => {
       const result = await friendStore.operate(currentAccountId.value!, friendId, type)
       if (result?.ok) {
         toast.success(result.message || `${opNames[type] || type}完成`)
@@ -302,7 +292,17 @@ async function handleToggleBlacklist(friend: any, e: Event) {
   e.stopPropagation()
   if (!currentAccountId.value)
     return
-  await friendStore.toggleBlacklist(currentAccountId.value, Number(friend.gid))
+  const gid = Number(friend.gid)
+  const isBlocked = blacklistGidSet.value.has(gid)
+  if (!isBlocked) {
+    await friendStore.toggleBlacklist(currentAccountId.value, gid)
+    return
+  }
+  const name = String(friend?.name || `GID ${gid}`).trim()
+  await confirmAction(`确定将 ${name} 移出黑名单吗？`, async () => {
+    await friendStore.toggleBlacklist(currentAccountId.value!, gid)
+    toast.success(`已移出黑名单: ${name}`)
+  })
 }
 
 function getFriendStatusText(friend: any) {
@@ -372,7 +372,10 @@ function handleFriendAvatarError(friend: any) {
 async function handleRemoveFromBlacklist(gid: number) {
   if (!currentAccountId.value)
     return
-  await friendStore.toggleBlacklist(currentAccountId.value, gid)
+  await confirmAction(`确定将 GID ${gid} 移出黑名单吗？`, async () => {
+    await friendStore.toggleBlacklist(currentAccountId.value!, gid)
+    toast.success(`已移出黑名单: GID ${gid}`)
+  })
 }
 
 async function refreshInteractRecords() {
@@ -480,7 +483,7 @@ async function handleRemoveKnownFriendGid(friend: any, e: Event) {
     return
   const gid = Number(friend?.gid) || 0
   const name = String(friend?.name || `GID ${gid}`).trim()
-  confirmAction(
+  await confirmAction(
     `确定将 ${name} 移出同步列表吗？后续如果最近访客再次命中，这个 GID 仍可被自动同步回来。`,
     async () => {
       await friendStore.removeKnownFriendGid(currentAccountId.value!, gid)
@@ -562,7 +565,7 @@ async function handleBatchAddKnownFriendGids() {
             v-model="searchKeyword"
             type="text"
             placeholder="搜索好友..."
-            class="farm-input w-full border border-gray-300 rounded-xl bg-white py-2 pl-10 pr-4 text-sm sm:w-64 dark:border-gray-600 focus:border-blue-500 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="w-full border farm-input border-gray-300 rounded-xl bg-white py-2 pl-10 pr-4 text-sm sm:w-64 dark:border-gray-600 focus:border-blue-500 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
         </div>
         <div v-if="activeTab === 'friends' && friends.length" class="text-sm text-gray-500">
@@ -600,10 +603,10 @@ async function handleBatchAddKnownFriendGids() {
     </div>
 
     <div v-if="loading || statusLoading || interactLoading" class="flex justify-center py-12">
-      <span class="text-4xl animate-spin">⏳</span>
+      <span class="animate-spin text-4xl">⏳</span>
     </div>
 
-    <div v-else-if="!currentAccountId" class="farm-card flex flex-col items-center justify-center gap-4 rounded-2xl bg-white p-12 text-center text-gray-500 shadow-md dark:bg-gray-800">
+    <div v-else-if="!currentAccountId" class="flex flex-col items-center justify-center gap-4 farm-card rounded-2xl bg-white p-12 text-center text-gray-500 shadow-md dark:bg-gray-800">
       <span class="text-4xl text-gray-400">👤</span>
       <div>
         <div class="text-lg text-gray-700 font-medium dark:text-gray-300">
@@ -615,7 +618,7 @@ async function handleBatchAddKnownFriendGids() {
       </div>
     </div>
 
-    <div v-else-if="!status?.connection?.connected" class="farm-card flex flex-col items-center justify-center gap-4 rounded-2xl bg-white p-12 text-center text-gray-500 shadow-md dark:bg-gray-800">
+    <div v-else-if="!status?.connection?.connected" class="flex flex-col items-center justify-center gap-4 farm-card rounded-2xl bg-white p-12 text-center text-gray-500 shadow-md dark:bg-gray-800">
       <span class="text-4xl text-gray-400">📡</span>
       <div>
         <div class="text-lg text-gray-700 font-medium dark:text-gray-300">
@@ -629,7 +632,7 @@ async function handleBatchAddKnownFriendGids() {
 
     <template v-else>
       <div v-if="activeTab === 'friends'" class="space-y-4">
-        <div v-if="currentAccountId && isQqAccount" class="farm-card mb-4 border border-amber-200 rounded-2xl bg-white p-4 shadow-md dark:border-amber-700/50 dark:bg-gray-800">
+        <div v-if="currentAccountId && isQqAccount" class="mb-4 border farm-card border-amber-200 rounded-2xl bg-white p-4 shadow-md dark:border-amber-700/50 dark:bg-gray-800">
           <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div class="flex items-center gap-2">
@@ -674,13 +677,13 @@ async function handleBatchAddKnownFriendGids() {
             </div>
           </div>
 
-          <div class="mt-4 grid gap-3 lg:grid-cols-2">
+          <div class="grid mt-4 gap-3 lg:grid-cols-2">
             <div>
               <label class="mb-1 block text-xs text-gray-500 dark:text-gray-400">访客检测入库冷却(秒)</label>
               <input
                 v-model.number="localKnownFriendGidSyncCooldownSec"
                 type="number"
-                class="farm-input w-full border border-gray-300 rounded-xl bg-white px-3 py-2 text-sm dark:border-gray-600 focus:border-blue-500 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                class="w-full border farm-input border-gray-300 rounded-xl bg-white px-3 py-2 text-sm dark:border-gray-600 focus:border-blue-500 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
             </div>
             <div>
@@ -688,7 +691,7 @@ async function handleBatchAddKnownFriendGids() {
               <input
                 v-model.number="localFriendsListCacheTtlSec"
                 type="number"
-                class="farm-input w-full border border-gray-300 rounded-xl bg-white px-3 py-2 text-sm dark:border-gray-600 focus:border-blue-500 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                class="w-full border farm-input border-gray-300 rounded-xl bg-white px-3 py-2 text-sm dark:border-gray-600 focus:border-blue-500 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
             </div>
           </div>
@@ -699,26 +702,26 @@ async function handleBatchAddKnownFriendGids() {
         </div>
 
         <template v-else>
-          <div class="farm-card flex flex-wrap items-center gap-2 rounded-2xl bg-white p-3 shadow-md dark:bg-gray-800">
+          <div class="friend-toolbar">
             <div class="flex-1" />
-            <button
-              class="cartoon-btn rounded-xl bg-gray-100 px-3 py-1.5 text-sm text-gray-600 transition dark:bg-gray-700 hover:bg-gray-200 dark:text-gray-300 disabled:opacity-50 dark:hover:bg-gray-600"
+            <ElButton
+              :loading="loading"
               :disabled="loading"
               @click="handleRefreshFriends"
             >
-              <div v-if="loading" class="i-svg-spinners-90-ring-with-bg mr-1 inline-block align-text-bottom" />
+              <span v-if="!loading" class="i-carbon-renew mr-1" />
               刷新列表
-            </button>
+            </ElButton>
           </div>
 
           <div
             v-for="friend in paginatedFriends"
             :key="friend.gid"
-            class="cartoon-card overflow-hidden rounded-2xl bg-white shadow-md dark:bg-gray-800"
+            class="friend-card"
           >
             <div
-              class="flex flex-col cursor-pointer justify-between gap-4 p-4 transition sm:flex-row sm:items-center hover:bg-gray-50 dark:hover:bg-gray-700/50"
-              :class="blacklistGidSet.has(Number(friend.gid)) ? 'opacity-50' : ''"
+              class="friend-card__header"
+              :class="blacklistGidSet.has(Number(friend.gid)) ? 'friend-card__header--muted' : ''"
               @click="toggleFriend(friend.gid)"
             >
               <div class="flex items-center gap-3">
@@ -761,52 +764,58 @@ async function handleBatchAddKnownFriendGids() {
                 </div>
               </div>
 
-              <div class="flex flex-wrap gap-2">
-                <button
-                  class="cartoon-btn rounded-xl bg-blue-100 px-3 py-2 text-sm text-blue-700 transition hover:bg-blue-200"
+              <div class="friend-card__actions">
+                <ElButton
+                  size="small"
+                  type="primary"
+                  plain
                   @click="handleOp(friend.gid, 'steal', $event)"
                 >
                   偷取
-                </button>
-                <button
-                  class="cartoon-btn rounded-xl bg-green-100 px-3 py-2 text-sm text-green-700 transition hover:bg-green-200"
+                </ElButton>
+                <ElButton
+                  size="small"
+                  type="success"
+                  plain
                   @click="handleOp(friend.gid, 'farming', $event)"
                 >
                   一键务农
-                </button>
-                <button
-                  class="cartoon-btn rounded-xl bg-red-100 px-3 py-2 text-sm text-red-700 transition hover:bg-red-200"
+                </ElButton>
+                <ElButton
+                  size="small"
+                  type="danger"
+                  plain
                   @click="handleOp(friend.gid, 'bad', $event)"
                 >
                   捣乱
-                </button>
-                <button
-                  class="cartoon-btn rounded-xl px-3 py-2 text-sm transition"
-                  :class="blacklistGidSet.has(Number(friend.gid))
-                    ? 'bg-gray-200 text-gray-600 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-700/50 dark:text-gray-400 dark:hover:bg-gray-700'"
+                </ElButton>
+                <ElButton
+                  size="small"
+                  plain
                   @click="handleToggleBlacklist(friend, $event)"
                 >
                   {{ blacklistGidSet.has(Number(friend.gid)) ? '移出黑名单' : '加入黑名单' }}
-                </button>
-                <button
+                </ElButton>
+                <ElButton
                   v-if="isQqAccount && knownFriendGidSet.has(Number(friend.gid))"
-                  class="cartoon-btn rounded-xl bg-amber-100 px-3 py-2 text-sm text-amber-700 transition dark:bg-amber-900/30 hover:bg-amber-200 dark:text-amber-400 dark:hover:bg-amber-900/50"
+                  size="small"
+                  type="warning"
+                  plain
                   @click="handleRemoveKnownFriendGid(friend, $event)"
                 >
                   移出同步列表
-                </button>
+                </ElButton>
               </div>
             </div>
 
-            <div v-if="expandedFriends.has(friend.gid)" class="border-t bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
+            <div v-if="expandedFriends.has(friend.gid)" class="friend-land-panel">
               <div v-if="friendLandsLoading[friend.gid]" class="flex justify-center py-4">
                 <div class="i-svg-spinners-90-ring-with-bg text-2xl text-blue-500" />
               </div>
               <div v-else-if="!friendLands[friend.gid] || friendLands[friend.gid]?.length === 0" class="py-4 text-center text-gray-500">
                 无土地数据
               </div>
-              <div v-else class="grid grid-cols-2 gap-2 lg:grid-cols-8 md:grid-cols-5 sm:grid-cols-4">
+              <div v-else class="friend-land-grid">
                 <LandCard
                   v-for="land in friendLands[friend.gid]"
                   :key="land.id"
@@ -819,14 +828,14 @@ async function handleBatchAddKnownFriendGids() {
           <!-- 分页控件 -->
           <div v-if="filteredFriends.length > pageSize" class="mt-4 flex flex-wrap items-center justify-center gap-2">
             <button
-              class="cartoon-btn border border-gray-200 rounded-xl bg-white px-3 py-1.5 text-sm text-gray-600 transition dark:border-gray-600 dark:bg-gray-800 hover:bg-gray-50 dark:text-gray-300 disabled:opacity-50 dark:hover:bg-gray-700"
+              class="border cartoon-btn border-gray-200 rounded-xl bg-white px-3 py-1.5 text-sm text-gray-600 transition dark:border-gray-600 dark:bg-gray-800 hover:bg-gray-50 dark:text-gray-300 disabled:opacity-50 dark:hover:bg-gray-700"
               :disabled="currentPage === 1"
               @click="goToPage(1)"
             >
               首页
             </button>
             <button
-              class="cartoon-btn border border-gray-200 rounded-xl bg-white px-3 py-1.5 text-sm text-gray-600 transition dark:border-gray-600 dark:bg-gray-800 hover:bg-gray-50 dark:text-gray-300 disabled:opacity-50 dark:hover:bg-gray-700"
+              class="border cartoon-btn border-gray-200 rounded-xl bg-white px-3 py-1.5 text-sm text-gray-600 transition dark:border-gray-600 dark:bg-gray-800 hover:bg-gray-50 dark:text-gray-300 disabled:opacity-50 dark:hover:bg-gray-700"
               :disabled="currentPage === 1"
               @click="goToPage(currentPage - 1)"
             >
@@ -852,14 +861,14 @@ async function handleBatchAddKnownFriendGids() {
               </template>
             </div>
             <button
-              class="cartoon-btn border border-gray-200 rounded-xl bg-white px-3 py-1.5 text-sm text-gray-600 transition dark:border-gray-600 dark:bg-gray-800 hover:bg-gray-50 dark:text-gray-300 disabled:opacity-50 dark:hover:bg-gray-700"
+              class="border cartoon-btn border-gray-200 rounded-xl bg-white px-3 py-1.5 text-sm text-gray-600 transition dark:border-gray-600 dark:bg-gray-800 hover:bg-gray-50 dark:text-gray-300 disabled:opacity-50 dark:hover:bg-gray-700"
               :disabled="currentPage === totalPages"
               @click="goToPage(currentPage + 1)"
             >
               下一页
             </button>
             <button
-              class="cartoon-btn border border-gray-200 rounded-xl bg-white px-3 py-1.5 text-sm text-gray-600 transition dark:border-gray-600 dark:bg-gray-800 hover:bg-gray-50 dark:text-gray-300 disabled:opacity-50 dark:hover:bg-gray-700"
+              class="border cartoon-btn border-gray-200 rounded-xl bg-white px-3 py-1.5 text-sm text-gray-600 transition dark:border-gray-600 dark:bg-gray-800 hover:bg-gray-50 dark:text-gray-300 disabled:opacity-50 dark:hover:bg-gray-700"
               :disabled="currentPage === totalPages"
               @click="goToPage(totalPages)"
             >
@@ -880,7 +889,9 @@ async function handleBatchAddKnownFriendGids() {
         </div>
 
         <div v-if="blacklist.length === 0" class="farm-card rounded-2xl bg-white p-8 text-center text-gray-500 shadow-md dark:bg-gray-800">
-          <div class="mx-auto mb-3 text-4xl text-gray-300">🚫</div>
+          <div class="mx-auto mb-3 text-4xl text-gray-300">
+            🚫
+          </div>
           暂无黑名单好友
         </div>
 
@@ -888,7 +899,7 @@ async function handleBatchAddKnownFriendGids() {
           <div
             v-for="item in blacklist"
             :key="item.gid"
-            class="cartoon-card flex items-center justify-between rounded-2xl bg-white p-4 shadow-md dark:bg-gray-800"
+            class="flex items-center justify-between cartoon-card rounded-2xl bg-white p-4 shadow-md dark:bg-gray-800"
           >
             <div class="flex items-center gap-3">
               <div class="h-10 w-10 flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-200 ring-1 ring-gray-100 dark:bg-gray-600 dark:ring-gray-700">
@@ -944,7 +955,9 @@ async function handleBatchAddKnownFriendGids() {
         </div>
 
         <div v-else-if="visibleInteractRecords.length === 0" class="farm-card rounded-2xl bg-white p-8 text-center text-gray-500 shadow-md dark:bg-gray-800">
-          <div class="mx-auto mb-3 text-4xl text-gray-300">👀</div>
+          <div class="mx-auto mb-3 text-4xl text-gray-300">
+            👀
+          </div>
           暂无访客记录
         </div>
 
@@ -952,7 +965,7 @@ async function handleBatchAddKnownFriendGids() {
           <div
             v-for="record in visibleInteractRecords"
             :key="record.key"
-            class="cartoon-card flex items-start gap-3 rounded-2xl bg-white p-4 shadow-md dark:bg-gray-800"
+            class="flex items-start gap-3 cartoon-card rounded-2xl bg-white p-4 shadow-md dark:bg-gray-800"
           >
             <div class="h-12 w-12 flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-200 ring-1 ring-gray-100 dark:bg-gray-700 dark:ring-gray-600">
               <img
@@ -998,15 +1011,6 @@ async function handleBatchAddKnownFriendGids() {
       </div>
     </template>
 
-    <ConfirmModal
-      :show="showConfirm"
-      :loading="confirmLoading"
-      title="确认操作"
-      :message="confirmMessage"
-      @confirm="onConfirm"
-      @cancel="!confirmLoading && (showConfirm = false)"
-    />
-
     <Teleport to="body">
       <div
         v-if="showBatchAddGidModal"
@@ -1024,11 +1028,11 @@ async function handleBatchAddKnownFriendGids() {
             v-model="batchGidInput"
             rows="8"
             placeholder="每行一个 GID，或用逗号、空格分隔&#10;例如：&#10;12345678&#10;87654321&#10;或&#10;12345678, 87654321, 11111111"
-            class="farm-input mb-4 w-full border border-gray-300 rounded-xl bg-white p-3 text-sm dark:border-gray-600 focus:border-blue-500 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="mb-4 w-full border farm-input border-gray-300 rounded-xl bg-white p-3 text-sm dark:border-gray-600 focus:border-blue-500 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
           <div class="flex justify-end gap-3">
             <button
-              class="cartoon-btn border border-gray-300 rounded-xl bg-white px-4 py-2 text-sm text-gray-700 transition dark:border-gray-600 dark:bg-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-600"
+              class="border cartoon-btn border-gray-300 rounded-xl bg-white px-4 py-2 text-sm text-gray-700 transition dark:border-gray-600 dark:bg-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-600"
               @click="showBatchAddGidModal = false"
             >
               取消
@@ -1077,10 +1081,10 @@ async function handleBatchAddKnownFriendGids() {
                 v-model="gidSearchKeyword"
                 type="text"
                 placeholder="搜索 GID..."
-                class="farm-input flex-1 border border-gray-300 rounded-xl bg-white px-3 py-2 text-sm dark:border-gray-600 focus:border-blue-500 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                class="flex-1 border farm-input border-gray-300 rounded-xl bg-white px-3 py-2 text-sm dark:border-gray-600 focus:border-blue-500 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
               <button
-                class="cartoon-btn shrink-0 rounded-xl bg-red-100 px-3 py-2 text-sm text-red-700 transition dark:bg-red-900/30 hover:bg-red-200 dark:text-red-400 disabled:opacity-50 dark:hover:bg-red-900/50"
+                class="shrink-0 cartoon-btn rounded-xl bg-red-100 px-3 py-2 text-sm text-red-700 transition dark:bg-red-900/30 hover:bg-red-200 dark:text-red-400 disabled:opacity-50 dark:hover:bg-red-900/50"
                 :disabled="knownFriendSettingsSaving || unsyncedGidCount === 0"
                 @click="handleRemoveUnsyncedGids"
               >
@@ -1140,3 +1144,85 @@ async function handleBatchAddKnownFriendGids() {
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+.friend-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg);
+  background: var(--theme-surface);
+  box-shadow: var(--theme-shadow-soft);
+}
+
+.friend-card {
+  overflow: hidden;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg);
+  background: var(--theme-surface);
+  box-shadow: var(--theme-shadow-soft);
+}
+
+.friend-card__header {
+  display: flex;
+  cursor: pointer;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  transition:
+    background-color var(--theme-duration-fast),
+    opacity var(--theme-duration-fast);
+}
+
+.friend-card__header:hover {
+  background: var(--theme-surface-soft);
+}
+
+.friend-card__header--muted {
+  opacity: 0.56;
+}
+
+.friend-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.friend-card__actions :deep(.el-button) {
+  margin-left: 0;
+}
+
+.friend-land-panel {
+  padding: 16px;
+  border-top: 1px solid var(--theme-border);
+  background: var(--theme-surface-soft);
+}
+
+.friend-land-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+@media (min-width: 640px) {
+  .friend-card__header {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .friend-card__actions {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 640px) {
+  .friend-land-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

@@ -5,53 +5,28 @@ import FarmPanel from '@/components/FarmPanel.vue'
 import TaskPanel from '@/components/TaskPanel.vue'
 
 const currentTab = ref<'farm' | 'bag' | 'task'>('farm')
+
+const tabOptions = [
+  { value: 'farm', label: '我的农场', icon: 'i-carbon-sprout' },
+  { value: 'bag', label: '我的背包', icon: 'i-carbon-box' },
+  { value: 'task', label: '我的任务', icon: 'i-carbon-task' },
+] as const
 </script>
 
 <template>
-  <div class="h-full flex flex-col p-4">
-    <div class="mb-4 flex space-x-2">
-      <button
-        class="cartoon-btn rounded-2xl px-5 py-2.5 font-medium transition-all"
-        :class="currentTab === 'farm'
-          ? 'text-white shadow-md'
-          : 'bg-white text-gray-600 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'"
-        :style="currentTab === 'farm' ? { backgroundColor: 'var(--theme-primary)' } : {}"
-        @click="currentTab = 'farm'"
-      >
-        <div class="flex items-center space-x-2">
-          <div class="i-carbon-sprout text-lg" />
-          <span>我的农场</span>
-        </div>
-      </button>
-      <button
-        class="cartoon-btn rounded-2xl px-5 py-2.5 font-medium transition-all"
-        :class="currentTab === 'bag'
-          ? 'text-white shadow-md'
-          : 'bg-white text-gray-600 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'"
-        :style="currentTab === 'bag' ? { backgroundColor: 'var(--theme-primary)' } : {}"
-        @click="currentTab = 'bag'"
-      >
-        <div class="flex items-center space-x-2">
-          <div class="i-carbon-box text-lg" />
-          <span>我的背包</span>
-        </div>
-      </button>
-      <button
-        class="cartoon-btn rounded-2xl px-5 py-2.5 font-medium transition-all"
-        :class="currentTab === 'task'
-          ? 'text-white shadow-md'
-          : 'bg-white text-gray-600 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'"
-        :style="currentTab === 'task' ? { backgroundColor: 'var(--theme-primary)' } : {}"
-        @click="currentTab = 'task'"
-      >
-        <div class="flex items-center space-x-2">
-          <div class="i-carbon-task text-lg" />
-          <span>我的任务</span>
-        </div>
-      </button>
+  <div class="personal-workspace">
+    <div class="personal-tabs">
+      <ElSegmented v-model="currentTab" :options="tabOptions" size="large">
+        <template #default="{ item }">
+          <div class="personal-tab-item">
+            <span :class="item.icon" />
+            <span>{{ item.label }}</span>
+          </div>
+        </template>
+      </ElSegmented>
     </div>
 
-    <div class="flex-1 overflow-hidden overflow-y-auto">
+    <div class="personal-content">
       <Transition
         mode="out-in"
         enter-active-class="transition duration-200 ease-out"
@@ -66,3 +41,47 @@ const currentTab = ref<'farm' | 'bag' | 'task'>('farm')
     </div>
   </div>
 </template>
+
+<style scoped>
+.personal-workspace {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.personal-tabs {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg);
+  background: var(--theme-surface);
+  padding: 8px;
+}
+
+.personal-tab-item {
+  min-width: 108px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.personal-content {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+@media (max-width: 640px) {
+  .personal-tabs {
+    overflow-x: auto;
+  }
+
+  .personal-tab-item {
+    min-width: 96px;
+  }
+}
+</style>

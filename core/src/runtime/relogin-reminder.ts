@@ -1,5 +1,6 @@
-export {};
+﻿export {};
 const { sleep } = require('../utils/utils');
+const fetch = require('node-fetch');
 
 interface ReloginReminderOptions {
     store: any;
@@ -40,6 +41,7 @@ function createReloginReminderService(options: ReloginReminderOptions) {
     } = options;
 
     const reloginWatchers = new Map<string, { startedAt: number }>();
+    const autoReconnectRuns = new Map<string, { startedAt: number }>();
 
     function getOfflineAutoDeleteMs(username = ''): number {
         const cfg = store.getOfflineReminder ? store.getOfflineReminder(username) : null;
@@ -100,6 +102,84 @@ function createReloginReminderService(options: ReloginReminderOptions) {
         }
     }
 
+    async function requestOpenReconnectCode(cfg: any): Promise<string> {
+        const endpoint = String(cfg && cfg.reconnectCodeEndpoint || '').trim();
+        const apiToken = String(cfg && cfg.reconnectApiToken || '').trim();
+        const openid = String(cfg && cfg.reconnectOpenid || '').trim();
+        if (!endpoint) throw new Error('auto reconnect endpoint is not configured');
+        if (!apiToken) throw new Error('auto reconnect API token is not configured');
+        if (!openid) throw new Error('auto reconnect openid is not configured');
+
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${apiToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ openid }),
+        });
+
+        let data: any = null;
+        try {
+            data = await response.json();
+        } catch {
+            data = null;
+        }
+
+        if (!response.ok) {
+            const message = data && (data.message || data.error)
+                ? String(data.message || data.error)
+                : `HTTP ${response.status}`;
+            throw new Error(`auto reconnect code request failed: ${message}`);
+        }
+
+        const success = data && data.success === true;
+        const code = String(data && data.code || '').trim();
+        if (!success || !code) {
+            throw new Error(`auto reconnect response did not include a valid code: ${JSON.stringify(data || {})}`);
+        }
+        return code;
+    }
+
+    async function triggerAutoReconnect(cfg: any, payload: OfflineReminderPayload, username = ''): Promise<void> {
+        if (!cfg || cfg.autoReconnectEnabled !== true) return;
+
+        const accountId = String(payload.accountId || '').trim();
+        const accountName = String(payload.accountName || '').trim();
+        if (!accountId) {
+            log('error', 'auto reconnect failed: missing account id');
+            return;
+        }
+
+        const key = accountId;
+        if (autoReconnectRuns.has(key)) {
+            log('system', `auto reconnect is already running: ${accountName || accountId}`, { accountId, accountName });
+            return;
+        }
+
+        autoReconnectRuns.set(key, { startedAt: Date.now() });
+        const delaySec = Math.max(0, Number.parseInt(cfg.reconnectDelaySec, 10) || 0);
+        const delayMs = delaySec * 1000;
+        addAccountLog('auto_reconnect_scheduled', `auto reconnect scheduled in ${delaySec}s: ${accountName || accountId}`, accountId, accountName, { reason: payload.reason || 'offline', delaySec });
+        log('system', `auto reconnect scheduled in ${delaySec}s: ${accountName || accountId}`, { accountId, accountName, username, delaySec });
+
+        (async () => {
+            try {
+                if (delayMs > 0) await sleep(delayMs);
+                log('system', `auto reconnect started: ${accountName || accountId}`, { accountId, accountName, username });
+                const code = await requestOpenReconnectCode(cfg);
+                applyReloginCode({ accountId, accountName, authCode: code });
+                addAccountLog('auto_reconnect_success', `auto reconnect succeeded, code updated and account restarted: ${accountName || accountId}`, accountId, accountName, { reason: payload.reason || 'offline', delaySec });
+                log('system', `auto reconnect succeeded: ${accountName || accountId}`, { accountId, accountName });
+            } catch (e: any) {
+                const message = e && e.message ? String(e.message) : String(e || 'unknown');
+                addAccountLog('auto_reconnect_failed', `auto reconnect failed: ${message}`, accountId, accountName, { reason: payload.reason || 'offline', delaySec });
+                log('error', `auto reconnect failed: ${accountName || accountId} - ${message}`, { accountId, accountName });
+            } finally {
+                autoReconnectRuns.delete(key);
+            }
+        })();
+    }
     function startReloginWatcher({ loginCode, accountId = '', accountName = '' }: { loginCode: string; accountId?: string; accountName?: string }): void {
         const code = String(loginCode || '').trim();
         if (!code) return;
@@ -188,6 +268,8 @@ function createReloginReminderService(options: ReloginReminderOptions) {
                 return;
             }
 
+            await triggerAutoReconnect(cfg, payload, username);
+
             log('系统', `下线提醒配置: 渠道=${cfg.channel}, 标题=${cfg.title}`, {
                 channel: cfg.channel,
                 title: cfg.title,
@@ -260,6 +342,7 @@ function createReloginReminderService(options: ReloginReminderOptions) {
         triggerOfflineReminder,
         startReloginWatcher,
         applyReloginCode,
+        triggerAutoReconnect,
     };
 }
 

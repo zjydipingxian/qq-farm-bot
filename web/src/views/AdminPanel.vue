@@ -1,11 +1,12 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import type { Card, UserCard } from '@/stores/user'
+import { ElMessageBox } from 'element-plus'
 import { computed, onMounted, ref, watch } from 'vue'
 import api from '@/api'
+import ConfirmModal from '@/components/ConfirmModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSwitch from '@/components/ui/BaseSwitch.vue'
-import ConfirmModal from '@/components/ConfirmModal.vue'
 import { useToastStore } from '@/stores/toast'
 import { useUserStore } from '@/stores/user'
 
@@ -13,7 +14,7 @@ const userStore = useUserStore()
 const toast = useToastStore()
 
 const activeTab = ref<'card' | 'user' | 'log' | 'system'>(
-  (localStorage.getItem('admin-active-tab') as 'card' | 'user' | 'log' | 'system') || 'card'
+  (localStorage.getItem('admin-active-tab') as 'card' | 'user' | 'log' | 'system') || 'card',
 )
 
 watch(activeTab, (newTab) => {
@@ -134,7 +135,7 @@ async function fetchCardClaimStatus() {
     }
   }
   catch (e: any) {
-    console.error('获取卡密领取状态失败:', e)
+    console.error('获取卡密领取状态失败', e)
   }
   finally {
     cardClaimLoading.value = false
@@ -142,7 +143,8 @@ async function fetchCardClaimStatus() {
 }
 
 async function toggleCardClaimStatus(enabled: boolean | undefined) {
-  if (enabled === undefined) return
+  if (enabled === undefined)
+    return
   cardClaimLoading.value = true
   try {
     const res = await api.post('/api/admin/card-claim/status', { enabled })
@@ -213,8 +215,20 @@ async function toggleCardStatus(card: Card) {
 }
 
 async function deleteCard(card: Card) {
-  if (!confirm(`确定要删除卡密 ${card.code} 吗？`))
-    return
+  try {
+    await ElMessageBox.confirm(`确定要删除卡密 ${card.code} 吗？`, '删除卡密', {
+      type: 'error',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      closeOnClickModal: false,
+      customClass: 'admin-confirm-dialog',
+    })
+  }
+  catch (e) {
+    if (e === 'cancel' || e === 'close')
+      return
+    throw e
+  }
 
   try {
     const result = await userStore.deleteCard(card.code)
@@ -238,15 +252,27 @@ async function deleteSelectedCards() {
     return
   }
 
-  if (!confirm(`确定要删除选中的 ${selectedCodes.length} 个卡密吗？此操作不可恢复！`))
-    return
+  try {
+    await ElMessageBox.confirm(`确定要删除选中的 ${selectedCodes.length} 个卡密吗？此操作不可恢复。`, '批量删除卡密', {
+      type: 'error',
+      confirmButtonText: '批量删除',
+      cancelButtonText: '取消',
+      closeOnClickModal: false,
+      customClass: 'admin-confirm-dialog',
+    })
+  }
+  catch (e) {
+    if (e === 'cancel' || e === 'close')
+      return
+    throw e
+  }
 
   try {
     const result = await userStore.deleteCardsBatch(selectedCodes)
     if (result.ok) {
       toast.success(`成功删除 ${result.deletedCount} 个卡密`)
       if (result.notFoundCount > 0) {
-        toast.warning(`${result.notFoundCount} 个卡密未找到`)
+        toast.warning(`${String(result.notFoundCount)} 个卡密未找到`)
       }
       selectedCards.value.clear()
       selectAll.value = false
@@ -287,8 +313,9 @@ async function copyCode(code: string) {
 
 async function copySelectedCards() {
   const codes = Array.from(selectedCards.value)
-  if (codes.length === 0) return
-  
+  if (codes.length === 0)
+    return
+
   try {
     const text = codes.join('\n')
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -321,7 +348,14 @@ function formatDate(timestamp: number | null) {
 
 function formatDateForFile(timestamp: number) {
   const date = new Date(timestamp)
-  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}_${String(date.getHours()).padStart(2, '0')}${String(date.getMinutes()).padStart(2, '0')}`
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+    '_',
+    String(date.getHours()).padStart(2, '0'),
+    String(date.getMinutes()).padStart(2, '0'),
+  ].join('')
 }
 
 function getCardTypeLabel(card: Card) {
@@ -346,15 +380,25 @@ function exportCardsToFile(cardsToExport: Card[], filename?: string) {
     return
   }
 
-  const content = cardsToExport.map(card =>
-    `卡密: ${card.code}\n描述: ${card.description}\n时长: ${getCardTypeLabel(card)}\n状态: ${card.enabled ? '启用' : '禁用'}\n${card.usedBy ? `使用者: ${card.usedBy}\n使用时间: ${formatDate(card.usedAt)}` : '未使用'}\n创建时间: ${formatDate(card.createdAt)}\n${'='.repeat(40)}`,
-  ).join('\n\n')
+  const content = cardsToExport.map((card) => {
+    const lines = [
+      `卡密: ${card.code}`,
+      `描述: ${card.description}`,
+      `类型: ${getCardTypeLabel(card)}`,
+      `状态: ${card.enabled ? '启用' : '禁用'}`,
+      card.usedBy ? `使用者: ${card.usedBy}` : '未使用',
+      card.usedBy ? `使用时间: ${formatDate(card.usedAt)}` : '',
+      `创建时间: ${formatDate(card.createdAt)}`,
+      '='.repeat(40),
+    ].filter(Boolean)
+    return lines.join('\n')
+  }).join('\n\n')
 
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = filename || `卡密导出_${formatDateForFile(Date.now())}.txt`
+  link.download = filename || (`卡密导出_${formatDateForFile(Date.now())}.txt`)
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
@@ -453,8 +497,20 @@ async function toggleUserStatus(user: UserInfo) {
 }
 
 async function deleteUser(user: UserInfo) {
-  if (!confirm(`确定要删除用户 ${user.username} 吗？此操作不可恢复！`))
-    return
+  try {
+    await ElMessageBox.confirm(`确定要删除用户 ${user.username} 吗？此操作不可恢复。`, '删除用户', {
+      type: 'error',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      closeOnClickModal: false,
+      customClass: 'admin-confirm-dialog',
+    })
+  }
+  catch (e) {
+    if (e === 'cancel' || e === 'close')
+      return
+    throw e
+  }
 
   try {
     const result = await userStore.deleteUser(user.username)
@@ -490,7 +546,7 @@ function formatDateTimeLocal(timestamp: number): string {
   const day = String(date.getDate()).padStart(2, '0')
   const hours = String(date.getHours()).padStart(2, '0')
   const minutes = String(date.getMinutes()).padStart(2, '0')
-  return `${year}-${month}-${day}T${hours}:${minutes}`
+  return [year, '-', month, '-', day, 'T', hours, ':', minutes].join('')
 }
 
 async function handleEdit() {
@@ -562,8 +618,10 @@ interface LoginLog {
 const loginLogs = ref<LoginLog[]>([])
 const loginLogsLoading = ref(false)
 const loginLogsTotal = ref(0)
-const showClearLogsConfirm = ref(false)
 const clearLogsLoading = ref(false)
+const sortedLoginLogs = computed(() =>
+  [...loginLogs.value].sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0)),
+)
 
 async function fetchLoginLogs() {
   loginLogsLoading.value = true
@@ -590,10 +648,24 @@ function openClearLogsConfirm() {
     toast.warning('暂无日志可清空')
     return
   }
-  showClearLogsConfirm.value = true
+  confirmClearLogs()
 }
 
 async function confirmClearLogs() {
+  try {
+    await ElMessageBox.confirm(`确定要清空所有登录日志吗？当前共有 ${loginLogsTotal.value} 条记录，此操作不可恢复。`, '确认清空日志', {
+      type: 'error',
+      confirmButtonText: '确认清空',
+      cancelButtonText: '取消',
+      closeOnClickModal: false,
+      customClass: 'admin-confirm-dialog',
+    })
+  }
+  catch (e) {
+    if (e === 'cancel' || e === 'close')
+      return
+    throw e
+  }
   clearLogsLoading.value = true
   try {
     const result = await userStore.clearLoginLogs()
@@ -601,7 +673,6 @@ async function confirmClearLogs() {
       toast.success('日志已清空')
       loginLogs.value = []
       loginLogsTotal.value = 0
-      showClearLogsConfirm.value = false
     }
     else {
       toast.error(result.error || '清空失败')
@@ -624,25 +695,21 @@ function getEventLabel(event: string): string {
   return event === 'login_success' ? '登录成功' : '登录失败'
 }
 
-function getEventClass(event: string): string {
-  return event === 'login_success' 
-    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
-    : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-}
-
 function getErrorTypeLabel(errorType: string | null): string {
-  if (!errorType) return '-'
+  if (!errorType)
+    return '-'
   const labels: Record<string, string> = {
-    'rate_limit': '速率限制',
-    'locked': '账户锁定',
-    'invalid_credentials': '凭证错误',
+    rate_limit: '速率限制',
+    locked: '账户锁定',
+    invalid_credentials: '凭证错误',
   }
   return labels[errorType] || errorType
 }
 
 function parseBrowser(userAgent: string): string {
-  if (!userAgent || userAgent === 'unknown') return '未知'
-  
+  if (!userAgent || userAgent === 'unknown')
+    return '未知'
+
   if (userAgent.includes('Edg/')) {
     const match = userAgent.match(/Edg\/([\d.]+)/)
     return `Edge ${match ? match[1] : ''}`
@@ -662,7 +729,7 @@ function parseBrowser(userAgent: string): string {
   if (userAgent.includes('MSIE') || userAgent.includes('Trident/')) {
     return 'IE'
   }
-  
+
   return '其他'
 }
 
@@ -730,7 +797,8 @@ async function loadDevicePresets() {
 
 function applyDevicePreset(presetId: string) {
   const preset = devicePresets.value.find(p => p.id === presetId)
-  if (!preset) return
+  if (!preset)
+    return
   const di = preset.deviceInfo as any
   localSystemConfig.value.os = di.os || 'Windows'
   localSystemConfig.value.clientVersion = di.clientVersion || ''
@@ -770,7 +838,8 @@ async function loadSystemConfig() {
           os: saved.os || 'Windows',
           deviceInfo: saved.deviceInfo ? { ...saved.deviceInfo } : { ...localSystemConfig.value.deviceInfo },
         }
-      } else {
+      }
+      else {
         // 没有已保存的配置时，用默认值填充输入框
         const def = defaultSystemConfig.value
         localSystemConfig.value = {
@@ -860,24 +929,21 @@ onMounted(() => {
       </h1>
     </div>
 
-    <div class="farm-card border border-gray-200 rounded-2xl bg-white shadow-md dark:border-gray-700 dark:bg-gray-800">
-      <div class="border-b border-gray-200 dark:border-gray-700">
-        <nav class="flex gap-1 p-2">
-          <button
-            v-for="tab in tabs"
-            :key="tab.key"
-            class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all"
-            :class="activeTab === tab.key
-              ? 'text-white shadow-sm'
-              : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'"
-            :style="activeTab === tab.key ? { backgroundColor: 'var(--theme-primary)' } : {}"
-            @click="activeTab = tab.key"
-          >
-            <div :class="tab.icon" />
-            {{ tab.label }}
-          </button>
-        </nav>
-      </div>
+    <div class="border farm-card border-gray-200 rounded-2xl bg-white shadow-md dark:border-gray-700 dark:bg-gray-800">
+      <ElTabs v-model="activeTab" class="admin-tabs">
+        <ElTabPane
+          v-for="tab in tabs"
+          :key="tab.key"
+          :name="tab.key"
+        >
+          <template #label>
+            <span class="admin-tab-label">
+              <span :class="tab.icon" />
+              <span>{{ tab.label }}</span>
+            </span>
+          </template>
+        </ElTabPane>
+      </ElTabs>
 
       <div class="p-4">
         <!-- 卡密管理 -->
@@ -897,7 +963,7 @@ onMounted(() => {
           </div>
 
           <!-- 卡密领取功能开关 -->
-          <div class="farm-card flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800">
+          <div class="flex items-center justify-between border farm-card border-gray-200 rounded-2xl bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800">
             <div>
               <h4 class="text-sm text-gray-900 font-medium dark:text-white">
                 卡密领取功能
@@ -951,15 +1017,15 @@ onMounted(() => {
             </button>
           </div>
 
-          <div class="farm-card flex items-center gap-2 rounded-2xl bg-white px-2 py-1.5 shadow-md dark:bg-gray-800">
+          <div class="flex items-center gap-2 farm-card rounded-2xl bg-white px-2 py-1.5 shadow-md dark:bg-gray-800">
             <input
               v-model="searchQuery"
               placeholder="搜索卡密、描述或使用者..."
-              class="farm-input h-8 w-64 border border-gray-300 rounded-xl bg-white px-3 text-sm text-gray-900 outline-none transition-all dark:border-gray-600 focus:border-green-500 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-green-500/20"
+              class="h-8 w-64 border farm-input border-gray-300 rounded-xl bg-white px-3 text-sm text-gray-900 outline-none transition-all dark:border-gray-600 focus:border-green-500 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-green-500/20"
             >
             <select
               v-model="filterStatus"
-              class="farm-input border border-gray-300 rounded-xl bg-white px-3 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              class="border farm-input border-gray-300 rounded-xl bg-white px-3 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
             >
               <option value="all">
                 全部状态
@@ -971,10 +1037,8 @@ onMounted(() => {
                 已使用
               </option>
               <option value="enabled">
-                已启用
               </option>
               <option value="disabled">
-                已禁用
               </option>
             </select>
           </div>
@@ -993,7 +1057,6 @@ onMounted(() => {
               class="ml-auto text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700"
               @click="selectedCards.clear(); selectAll = false"
             >
-              清除选择
             </button>
           </div>
 
@@ -1002,7 +1065,7 @@ onMounted(() => {
             <div>加载中...</div>
           </div>
 
-          <div v-else class="farm-card overflow-hidden rounded-2xl bg-white shadow-md dark:bg-gray-800">
+          <div v-else class="overflow-hidden farm-card rounded-2xl bg-white shadow-md dark:bg-gray-800">
             <div class="overflow-x-auto">
               <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead class="bg-gray-50 dark:bg-gray-700">
@@ -1126,7 +1189,7 @@ onMounted(() => {
                   </label>
                   <BaseInput
                     v-model="newCard.description"
-                    placeholder="例如：月卡-2024"
+                    placeholder="例如：月卡 2024"
                   />
                 </div>
                 <div>
@@ -1167,7 +1230,7 @@ onMounted(() => {
                     输入-1表示永久，其他数字表示天数
                   </p>
                   <p v-else class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    用户使用后可增加的账号额度数量
+                    用户使用后可增加的账号额度数
                   </p>
                 </div>
                 <div>
@@ -1214,7 +1277,7 @@ onMounted(() => {
             <div>加载中...</div>
           </div>
 
-          <div v-else class="farm-card overflow-hidden border border-gray-200 rounded-2xl shadow-md dark:border-gray-700">
+          <div v-else class="overflow-hidden border farm-card border-gray-200 rounded-2xl shadow-md dark:border-gray-700">
             <div class="overflow-x-auto">
               <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead class="bg-gray-50 dark:bg-gray-700">
@@ -1260,7 +1323,7 @@ onMounted(() => {
                         class="inline-flex rounded-full px-2 text-xs font-semibold leading-5"
                         :class="user.role === 'admin' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' : 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'"
                       >
-                        {{ user.role === 'admin' ? '无限制' : `${user.accountLimit || 2}个` }}
+                        {{ user.role === 'admin' ? '无限' : `${user.accountLimit || 2}个` }}
                       </span>
                     </td>
                     <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-900 dark:text-white">
@@ -1331,7 +1394,7 @@ onMounted(() => {
                     placeholder="输入新用户名（留空则不修改）"
                   />
                   <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    用户名只能包含字母、数字和下划线，长度3-32位
+                    用户名只能包含字母、数字和下划线，长度3-32
                   </p>
                 </div>
                 <div>
@@ -1358,7 +1421,7 @@ onMounted(() => {
                     placeholder="可添加的账号数量"
                   />
                   <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    用户最多可添加的农场账号数量
+                    用户最多可添加的农场账号数
                   </p>
                 </div>
                 <div>
@@ -1371,13 +1434,13 @@ onMounted(() => {
                       type="checkbox"
                       class="border-gray-300 rounded text-blue-600 focus:ring-blue-500"
                     >
-                    <span class="text-sm text-gray-600 dark:text-gray-400">永久有效</span>
+                    <span class="text-sm text-gray-600 dark:text-gray-400">姘镐箙鏈夋晥</span>
                   </div>
                   <input
                     v-if="!editForm.isPermanent"
                     v-model="editForm.expiresAt"
                     type="datetime-local"
-                    class="farm-input mt-2 w-full border border-gray-200 rounded-xl bg-white px-3 py-2 text-sm dark:border-gray-600 focus:border-blue-500 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    class="mt-2 w-full border farm-input border-gray-200 rounded-xl bg-white px-3 py-2 text-sm dark:border-gray-600 focus:border-blue-500 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
                   >
                 </div>
               </div>
@@ -1418,109 +1481,51 @@ onMounted(() => {
                 :loading="loginLogsLoading"
                 @click="fetchLoginLogs"
               >
-                刷新
+              刷新
               </BaseButton>
             </div>
           </div>
 
-          <div class="farm-card overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-md dark:border-gray-700 dark:bg-gray-800">
-            <div class="overflow-x-auto">
-              <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead class="bg-gray-50 dark:bg-gray-900">
-                  <tr>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500 font-medium uppercase dark:text-gray-300">
-                      时间
-                    </th>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500 font-medium uppercase dark:text-gray-300">
-                      事件
-                    </th>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500 font-medium uppercase dark:text-gray-300">
-                      用户名
-                    </th>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500 font-medium uppercase dark:text-gray-300">
-                      错误类型
-                    </th>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500 font-medium uppercase dark:text-gray-300">
-                      IP地址
-                    </th>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500 font-medium uppercase dark:text-gray-300">
-                      浏览器
-                    </th>
-                  </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
-                  <tr v-if="loginLogsLoading">
-                    <td colspan="6" class="px-3 py-8 text-center text-gray-500 dark:text-gray-400">
-                      加载中...
-                    </td>
-                  </tr>
-                  <tr v-else-if="loginLogs.length === 0">
-                    <td colspan="6" class="px-3 py-8 text-center text-gray-500 dark:text-gray-400">
-                      暂无登录日志
-                    </td>
-                  </tr>
-                  <tr v-for="log in loginLogs" :key="log.id">
-                    <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-900 dark:text-white">
-                      {{ formatLogTime(log.timestamp) }}
-                    </td>
-                    <td class="whitespace-nowrap px-3 py-2">
-                      <span
-                        class="inline-flex rounded-full px-2 text-xs font-semibold leading-5"
-                        :class="getEventClass(log.event)"
-                      >
-                        {{ getEventLabel(log.event) }}
-                      </span>
-                    </td>
-                    <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-900 font-medium dark:text-white">
-                      {{ log.username }}
-                    </td>
-                    <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-900 dark:text-white">
-                      {{ getErrorTypeLabel(log.errorType) }}
-                    </td>
-                    <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-600 font-mono dark:text-gray-300">
-                      {{ log.ip }}
-                    </td>
-                    <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-600 dark:text-gray-300">
-                      {{ parseBrowser(log.userAgent) }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+          <div class="admin-panel-card">
+            <ElTable
+              v-loading="loginLogsLoading"
+              :data="sortedLoginLogs"
+              stripe
+              border
+              class="admin-table"
+              empty-text="暂无登录日志"
+            >
+              <ElTableColumn label="时间" min-width="170">
+                <template #default="{ row }">
+                  {{ formatLogTime(row.timestamp) }}
+                </template>
+              </ElTableColumn>
+              <ElTableColumn label="事件" width="120">
+                <template #default="{ row }">
+                  <ElTag
+                    size="small"
+                    :type="row.event === 'login_success' ? 'success' : 'danger'"
+                    effect="light"
+                  >
+                    {{ getEventLabel(row.event) }}
+                  </ElTag>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn prop="username" label="用户名" min-width="130" />
+              <ElTableColumn label="错误类型" min-width="140">
+                <template #default="{ row }">
+                  {{ getErrorTypeLabel(row.errorType) }}
+                </template>
+              </ElTableColumn>
+              <ElTableColumn prop="ip" label="IP 地址" min-width="150" />
+              <ElTableColumn label="浏览器" min-width="180">
+                <template #default="{ row }">
+                  {{ parseBrowser(row.userAgent) }}
+                </template>
+              </ElTableColumn>
+            </ElTable>
             <div v-if="loginLogsTotal > 0" class="border-t border-gray-200 px-4 py-3 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
-              共 {{ loginLogsTotal }} 条记录
-            </div>
-          </div>
-
-          <!-- 清空日志确认弹窗 -->
-          <div
-            v-if="showClearLogsConfirm"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
-            @click.self="showClearLogsConfirm = false"
-          >
-            <div class="max-w-md w-full rounded-2xl bg-white p-5 shadow-xl dark:bg-gray-800" @click.stop>
-              <h2 class="mb-4 text-lg text-gray-900 font-bold dark:text-white">
-                确认清空日志
-              </h2>
-              <p class="mb-4 text-gray-600 dark:text-gray-300">
-                确定要清空所有登录日志吗？此操作不可恢复。
-              </p>
-              <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
-                当前共有 {{ loginLogsTotal }} 条记录
-              </p>
-              <div class="flex justify-end space-x-3">
-                <BaseButton variant="secondary" size="sm" @click="showClearLogsConfirm = false">
-                  取消
-                </BaseButton>
-                <BaseButton
-                  variant="danger"
-                  size="sm"
-                  :loading="clearLogsLoading"
-                  @click="confirmClearLogs"
-                >
-                  确认清空
-                </BaseButton>
-              </div>
+              共 {{ loginLogsTotal }} 条记录，最新日志显示在最上方
             </div>
           </div>
         </div>
@@ -1532,7 +1537,7 @@ onMounted(() => {
           </h3>
 
           <div class="space-y-4">
-            <div class="farm-card border border-gray-200 rounded-2xl bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800">
+            <div class="border farm-card border-gray-200 rounded-2xl bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800">
               <h4 class="mb-3 flex items-center gap-2 text-base text-gray-900 font-bold dark:text-gray-100">
                 <div class="i-carbon-settings" />
                 系统配置
@@ -1603,12 +1608,12 @@ onMounted(() => {
               </div>
 
               <!-- 设备详细信息 -->
-              <div class="mt-3 grid grid-cols-2 gap-3 text-sm">
+              <div class="grid grid-cols-2 mt-3 gap-3 text-sm">
                 <BaseInput
                   v-model="localSystemConfig.deviceInfo.clientVersion"
                   label="客户端版本"
                   type="text"
-                  :placeholder="defaultSystemConfig.deviceInfo.clientVersion || '从服务器加载中...'"
+                  :placeholder="defaultSystemConfig.deviceInfo.clientVersion || '从服务器加载...'"
                   class="col-span-2"
                   @change="localSystemConfig.clientVersion = localSystemConfig.deviceInfo.clientVersion"
                 />
@@ -1626,7 +1631,7 @@ onMounted(() => {
                 />
                 <BaseInput
                   v-model="localSystemConfig.deviceInfo.memory"
-                  label="内存(MB)"
+                  label="内存 (MB)"
                   type="text"
                   placeholder="16384"
                 />
@@ -1683,4 +1688,53 @@ onMounted(() => {
 </template>
 
 <style scoped lang="postcss">
+.admin-panel-card {
+  overflow: hidden;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-lg);
+  background: var(--theme-surface);
+  box-shadow: var(--theme-shadow-soft);
+}
+
+.admin-tabs {
+  --el-tabs-header-height: 48px;
+}
+
+.admin-tabs :deep(.el-tabs__header) {
+  margin: 0;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.admin-tabs :deep(.el-tabs__nav-wrap::after),
+.admin-tabs :deep(.el-tabs__content) {
+  display: none;
+}
+
+.admin-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+}
+
+.admin-tab-label > span:first-child {
+  width: 16px;
+  height: 16px;
+}
+
+.admin-table {
+  width: 100%;
+}
+
+.admin-table :deep(.el-table__cell) {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.admin-table :deep(.el-table__header th) {
+  background: var(--theme-surface-soft);
+  color: var(--theme-text-secondary);
+  font-weight: 650;
+}
 </style>

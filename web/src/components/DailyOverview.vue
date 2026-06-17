@@ -97,7 +97,7 @@ function formatGiftProgress(gift: any) {
         <div
           v-for="gift in gifts"
           :key="gift.key"
-          class="farm-card flex flex-col justify-between rounded-xl p-3 2xl:p-4"
+          class="flex flex-col justify-between farm-card rounded-xl p-3 2xl:p-4"
         >
           <div class="mb-2 flex items-center gap-2">
             <div
@@ -105,7 +105,6 @@ function formatGiftProgress(gift: any) {
               :class="gift.doneToday ? 'bg-green-100 dark:bg-green-900/30' : (gift.enabled ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-gray-100 dark:bg-gray-700')"
             >
               <span>{{ getGiftIcon(gift.key) }}</span>
-              />
             </div>
             <span class="text-sm font-medium leading-tight 2xl:text-base" style="color: var(--theme-text, #374151)">
               {{ gift.label }}
