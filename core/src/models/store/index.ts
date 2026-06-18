@@ -3,6 +3,7 @@ const sharedState = require('./shared-state');
 const globalConfig = require('./global-config');
 const accountConfig = require('./account-config');
 const accounts = require('./accounts');
+const stealReports = require('./steal-reports');
 
 module.exports = {
     // Account config
@@ -65,4 +66,10 @@ module.exports = {
     // System config
     getSystemConfig: globalConfig.getSystemConfig,
     setSystemConfig: globalConfig.setSystemConfig,
+
+    // Steal reports
+    addStealReport: stealReports.addStealReport,
+    addStealReports: stealReports.addStealReports,
+    getStealReports: stealReports.getStealReports,
+    getFriendValueRanking: stealReports.getFriendValueRanking,
 };

@@ -10,6 +10,7 @@ const {
     getFriendBlacklist,
     getPlantBlacklist,
     getFriendsListCacheTtlSec,
+    addStealReports,
 } = require('../../models/store');
 const { getUserState } = require('../../utils/network');
 const { toNum, toLong, toTimeSec, getServerTimeSec, log, logWarn, sleep, randomDelay } = require('../../utils/utils');
@@ -478,6 +479,145 @@ export async function runBatchWithFallback(ids: number[], batchFn: (ids: number[
     }
 }
 
+function findStealableInfo(status: AnalyzeResult, landId: number): any {
+    return (status.stealableInfo || []).find((item: any) => Number(item && item.landId) === Number(landId)) || {};
+}
+
+function buildStealReportInput(params: {
+    accountId: string;
+    friendGid: number;
+    friendName: string;
+    source: string;
+    landId?: number | null;
+    info?: any;
+    success: boolean;
+    reason?: string;
+}): any {
+    const info = params.info || {};
+    return {
+        accountId: params.accountId,
+        friendGid: params.friendGid,
+        friendName: params.friendName || `GID:${params.friendGid}`,
+        source: params.source,
+        opType: 'steal',
+        status: params.success ? 'success' : 'failed',
+        success: params.success,
+        reason: params.reason || '',
+        landId: params.landId ?? null,
+        plantId: info.plantId ?? null,
+        plantName: info.name || '',
+        cropStatus: params.success ? 'stolen' : 'failed',
+        gold: 0,
+        exp: 0,
+    };
+}
+
+function isRetryableHarvestError(error: any): boolean {
+    const message = String((error && error.message) || error || '');
+    return message.includes('1000034') || message.includes('网络繁忙') || message.includes('網絡繁忙');
+}
+
+async function stealHarvestWithRetry(gid: number, landIds: number[], maxAttempts = 2): Promise<void> {
+    let lastError: any = null;
+    const attempts = Math.max(1, maxAttempts);
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+        try {
+            await stealHarvest(gid, landIds);
+            return;
+        } catch (e: any) {
+            lastError = e;
+            if (!isRetryableHarvestError(e) || attempt >= attempts) {
+                throw e;
+            }
+            await randomDelay(800, 1400);
+        }
+    }
+    throw lastError;
+}
+
+function recordAutoStealSuccessReports(accountId: string, gid: number, name: string, targetLands: number[], status: AnalyzeResult, ok: number): void {
+    if (ok <= 0) return;
+    addStealReports(targetLands.slice(0, ok).map((landId: number) => {
+        const info = findStealableInfo(status, landId);
+        return buildStealReportInput({
+            accountId,
+            friendGid: gid,
+            friendName: name,
+            source: 'auto',
+            landId,
+            info,
+            success: true,
+        });
+    }));
+}
+
+async function stealHarvestWithReports(params: {
+    gid: number;
+    friendName: string;
+    accountId: string;
+    source: string;
+    targetLands: number[];
+    status: AnalyzeResult;
+}): Promise<{ ok: number; stolenPlants: string[] }> {
+    const targetLands = Array.isArray(params.targetLands) ? params.targetLands.filter(Boolean) : [];
+    if (targetLands.length === 0) return { ok: 0, stolenPlants: [] };
+
+    const reports: any[] = [];
+    const stolenPlants: string[] = [];
+
+    try {
+        await stealHarvestWithRetry(params.gid, targetLands);
+        for (const landId of targetLands) {
+            const info = findStealableInfo(params.status, landId);
+            if (info.name) stolenPlants.push(info.name);
+            reports.push(buildStealReportInput({
+                accountId: params.accountId,
+                friendGid: params.gid,
+                friendName: params.friendName,
+                source: params.source,
+                landId,
+                info,
+                success: true,
+            }));
+        }
+        addStealReports(reports);
+        return { ok: targetLands.length, stolenPlants };
+    } catch (batchError: any) {
+        let ok = 0;
+        for (const landId of targetLands) {
+            const info = findStealableInfo(params.status, landId);
+            try {
+                await stealHarvestWithRetry(params.gid, [landId]);
+                ok++;
+                if (info.name) stolenPlants.push(info.name);
+                reports.push(buildStealReportInput({
+                    accountId: params.accountId,
+                    friendGid: params.gid,
+                    friendName: params.friendName,
+                    source: params.source,
+                    landId,
+                    info,
+                    success: true,
+                }));
+            } catch (e: any) {
+                reports.push(buildStealReportInput({
+                    accountId: params.accountId,
+                    friendGid: params.gid,
+                    friendName: params.friendName,
+                    source: params.source,
+                    landId,
+                    info,
+                    success: false,
+                    reason: e?.message || batchError?.message || 'steal failed',
+                }));
+            }
+            await randomDelay(500, 800);
+        }
+        addStealReports(reports);
+        return { ok, stolenPlants };
+    }
+}
+
 /**
  * 面板手动好友操作（单个好友）
  * opType: 'steal' | 'water' | 'weed' | 'bug' | 'bad'
@@ -513,7 +653,15 @@ export async function doFriendOperation(friendGid: any, opType: string): Promise
             if (!precheck.canOperate) return { ok: true, opType, count: 0, message: 'Ta已经被偷的精光了QAQ' };
             const maxNum: number = precheck.canStealNum > 0 ? precheck.canStealNum : status.stealable.length;
             const target: number[] = status.stealable.slice(0, maxNum);
-            count = await runBatchWithFallback(target, (ids: number[]) => stealHarvest(gid, ids), (ids: number[]) => stealHarvest(gid, ids));
+            const stealResult: { ok: number; stolenPlants: string[] } = await stealHarvestWithReports({
+                gid,
+                friendName: `GID:${gid}`,
+                accountId: state.accountId,
+                source: 'manual',
+                targetLands: target,
+                status,
+            });
+            count = stealResult.ok;
             if (count > 0) {
                 recordOperation('steal', count);
                 // 手动偷取成功后立即尝试出售一次果实
@@ -673,7 +821,7 @@ export async function visitFriend(friend: any, totalActions: any, myGid: number,
 
             // 尝试批量偷取
             try {
-                await stealHarvest(gid, targetLands);
+                await stealHarvestWithRetry(gid, targetLands);
                 ok = targetLands.length;
                 targetLands.forEach((id: number) => {
                     const info: any = status.stealableInfo.find((x: any) => x.landId === id);
@@ -683,7 +831,7 @@ export async function visitFriend(friend: any, totalActions: any, myGid: number,
                 // 批量失败，降级为单个
                 for (const landId of targetLands) {
                     try {
-                        await stealHarvest(gid, [landId]);
+                        await stealHarvestWithRetry(gid, [landId]);
                         ok++;
                         const info: any = status.stealableInfo.find((x: any) => x.landId === landId);
                         if (info) stolenPlants.push(info.name);
@@ -696,6 +844,7 @@ export async function visitFriend(friend: any, totalActions: any, myGid: number,
                 const plantNames: string = [...new Set(stolenPlants)].join('/');
                 actions.push(`偷${ok}${plantNames ? `(${  plantNames  })` : ''}`);
                 totalActions.steal += ok;
+                recordAutoStealSuccessReports(accountId, gid, name, targetLands, status, ok);
                 recordOperation('steal', ok);
                 await randomDelay(500, 800);
             }
@@ -818,7 +967,7 @@ export async function visitFriendForSteal(friend: any, totalActions: any, myGid:
 
             // 尝试批量偷取
             try {
-                await stealHarvest(gid, targetLands);
+                await stealHarvestWithRetry(gid, targetLands);
                 ok = targetLands.length;
                 targetLands.forEach((id: number) => {
                     const info: any = status.stealableInfo.find((x: any) => x.landId === id);
@@ -828,7 +977,7 @@ export async function visitFriendForSteal(friend: any, totalActions: any, myGid:
                 // 批量失败，降级为单个
                 for (const landId of targetLands) {
                     try {
-                        await stealHarvest(gid, [landId]);
+                        await stealHarvestWithRetry(gid, [landId]);
                         ok++;
                         const info: any = status.stealableInfo.find((x: any) => x.landId === landId);
                         if (info) stolenPlants.push(info.name);
@@ -841,6 +990,7 @@ export async function visitFriendForSteal(friend: any, totalActions: any, myGid:
                 const plantNames: string = [...new Set(stolenPlants)].join('/');
                 actions.push(`偷${ok}${plantNames ? `(${plantNames})` : ''}`);
                 totalActions.steal += ok;
+                recordAutoStealSuccessReports(accountId, gid, name, targetLands, status, ok);
                 recordOperation('steal', ok);
                 await randomDelay(500, 800);
             }
@@ -931,4 +1081,3 @@ export function clearFriendsListCache(): void {
     friendsListCache = null;
     friendsListCacheTime = 0;
 }
-

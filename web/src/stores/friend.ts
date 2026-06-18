@@ -23,6 +23,12 @@ export const useFriendStore = defineStore('friend', () => {
   const interactRecords = ref<any[]>([])
   const interactLoading = ref(false)
   const interactError = ref('')
+  const stealReports = ref<any[]>([])
+  const stealReportsTotal = ref(0)
+  const stealReportsLoading = ref(false)
+  const friendValueRanking = ref<any[]>([])
+  const friendValueRankingTotal = ref(0)
+  const friendValueRankingLoading = ref(false)
 
   const knownFriendGids = ref<number[]>([])
   const knownFriendGidSyncCooldownSec = ref(600)
@@ -186,6 +192,44 @@ export const useFriendStore = defineStore('friend', () => {
     }
   }
 
+  async function fetchStealReports(accountId: string, params: Record<string, any> = {}) {
+    if (!accountId)
+      return
+    stealReportsLoading.value = true
+    try {
+      const res = await api.get('/api/steal-reports', {
+        headers: { 'x-account-id': accountId },
+        params,
+      })
+      if (res.data.ok) {
+        stealReports.value = Array.isArray(res.data.data?.rows) ? res.data.data.rows : []
+        stealReportsTotal.value = Number(res.data.data?.total || 0)
+      }
+    }
+    finally {
+      stealReportsLoading.value = false
+    }
+  }
+
+  async function fetchFriendValueRanking(accountId: string, params: Record<string, any> = {}) {
+    if (!accountId)
+      return
+    friendValueRankingLoading.value = true
+    try {
+      const res = await api.get('/api/friend-value-ranking', {
+        headers: { 'x-account-id': accountId },
+        params,
+      })
+      if (res.data.ok) {
+        friendValueRanking.value = Array.isArray(res.data.data?.rows) ? res.data.data.rows : []
+        friendValueRankingTotal.value = Number(res.data.data?.total || 0)
+      }
+    }
+    finally {
+      friendValueRankingLoading.value = false
+    }
+  }
+
   function applyKnownFriendSettings(data: KnownFriendSettings | null | undefined) {
     if (!data)
       return
@@ -294,6 +338,12 @@ export const useFriendStore = defineStore('friend', () => {
     interactRecords,
     interactLoading,
     interactError,
+    stealReports,
+    stealReportsTotal,
+    stealReportsLoading,
+    friendValueRanking,
+    friendValueRankingTotal,
+    friendValueRankingLoading,
     knownFriendGids,
     knownFriendGidSyncCooldownSec,
     friendsListCacheTtlSec,
@@ -305,6 +355,8 @@ export const useFriendStore = defineStore('friend', () => {
     fetchInteractRecords,
     fetchFriendLands,
     operate,
+    fetchStealReports,
+    fetchFriendValueRanking,
     fetchKnownFriendSettings,
     saveKnownFriendSettings,
     removeKnownFriendGid,

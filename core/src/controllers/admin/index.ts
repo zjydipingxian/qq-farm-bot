@@ -19,6 +19,7 @@ const { mountAuthRoutes } = require('./auth-routes');
 const { mountAccountRoutes } = require('./account-routes');
 const { mountFarmRoutes } = require('./farm-routes');
 const { mountFriendRoutes } = require('./friend-routes');
+const { mountStealReportRoutes } = require('./steal-report-routes');
 const { mountAdminRoutes } = require('./admin-routes');
 const { mountActivityRoutes } = require('./activity-routes');
 const {
@@ -75,6 +76,7 @@ function startAdminServer(dataProvider: any): void {
     mountAuthRoutes(app, ctx);
     mountFarmRoutes(app, ctx);
     mountFriendRoutes(app, ctx);
+    mountStealReportRoutes(app, ctx);
     mountAdminRoutes(app, ctx);
     mountAccountRoutes(app, ctx);
     mountActivityRoutes(app, ctx);

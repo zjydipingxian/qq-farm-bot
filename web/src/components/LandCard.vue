@@ -27,6 +27,8 @@ const statusMeta = computed(() => {
     return { label: '可收获', className: 'is-harvestable', tagType: 'warning' as const }
   if (status === 'stealable')
     return { label: '可偷取', className: 'is-stealable', tagType: 'success' as const }
+  if (status === 'harvested')
+    return { label: '已成熟不可偷', className: 'is-harvested', tagType: 'info' as const }
   if (status === 'growing')
     return { label: '生长中', className: 'is-growing', tagType: 'success' as const }
   return { label: land.value.phaseName || '未开垦', className: 'is-idle', tagType: 'info' as const }

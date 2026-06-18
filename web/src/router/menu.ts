@@ -30,6 +30,13 @@ export const menuRoutes: MenuItem[] = [
     component: () => import('@/views/Friends.vue'),
   },
   {
+    path: 'friend-radar',
+    name: 'friend-radar',
+    label: '好友雷达',
+    icon: 'i-carbon-search-locate',
+    component: () => import('@/views/FriendRadar.vue'),
+  },
+  {
     path: 'analytics',
     name: 'analytics',
     label: '分析',

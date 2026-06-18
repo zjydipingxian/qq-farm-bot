@@ -134,6 +134,7 @@ async function confirmAction(message: string, action: () => Promise<any>, type: 
 const selectedFriendId = ref('')
 const currentPage = ref(1)
 const pageSize = 25
+const refreshingMatureFriendGids = new Set<string>()
 
 const sortedFriends = computed(() => {
   return [...friends.value].sort((a: any, b: any) => {
@@ -238,9 +239,20 @@ async function loadData() {
 useIntervalFn(() => {
   for (const gid in friendLands.value) {
     if (friendLands.value[gid]) {
-      friendLands.value[gid] = friendLands.value[gid].map((l: any) =>
-        l.matureInSec > 0 ? { ...l, matureInSec: l.matureInSec - 1 } : l,
-      )
+      let shouldRefresh = false
+      friendLands.value[gid] = friendLands.value[gid].map((l: any) => {
+        if (l.matureInSec <= 0)
+          return l
+        const nextMatureInSec = Math.max(0, l.matureInSec - 1)
+        if (nextMatureInSec === 0)
+          shouldRefresh = true
+        return { ...l, matureInSec: nextMatureInSec }
+      })
+      if (shouldRefresh && currentAccountId.value && !refreshingMatureFriendGids.has(gid)) {
+        refreshingMatureFriendGids.add(gid)
+        void friendStore.fetchFriendLands(currentAccountId.value, gid)
+          .finally(() => refreshingMatureFriendGids.delete(gid))
+      }
     }
   }
 }, 1000)

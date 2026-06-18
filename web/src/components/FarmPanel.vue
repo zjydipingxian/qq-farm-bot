@@ -99,9 +99,19 @@ watch(currentAccountId, () => {
 
 const { pause, resume } = useIntervalFn(() => {
   if (lands.value) {
+    let shouldRefresh = false
     lands.value = lands.value.map((land: any) =>
-      land.matureInSec > 0 ? { ...land, matureInSec: land.matureInSec - 1 } : land,
+      {
+        if (land.matureInSec <= 0)
+          return land
+        const nextMatureInSec = Math.max(0, land.matureInSec - 1)
+        if (nextMatureInSec === 0)
+          shouldRefresh = true
+        return { ...land, matureInSec: nextMatureInSec }
+      },
     )
+    if (shouldRefresh && !loading.value)
+      void refresh()
   }
 }, 1000)
 
