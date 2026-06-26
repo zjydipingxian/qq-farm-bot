@@ -32,7 +32,6 @@ interface FriendRadarResult {
 
 const NEAR_MATURE_SECONDS = 10 * 60
 const BLACKLIST_PENALTY = 1000
-const DEFAULT_SCAN_LIMIT = 20
 
 const accountStore = useAccountStore()
 const friendStore = useFriendStore()
@@ -455,8 +454,6 @@ function sourceText(source: string) {
 onMounted(async () => {
   await loadRadarBaseData()
   await Promise.all([reloadReports(), reloadRanking()])
-  if (canScan.value)
-    void startScan(DEFAULT_SCAN_LIMIT, 'reset')
 })
 
 watch(currentAccountId, async () => {
@@ -466,8 +463,6 @@ watch(currentAccountId, async () => {
   selectedGid.value = ''
   await loadRadarBaseData()
   await Promise.all([reloadReports(), reloadRanking()])
-  if (canScan.value)
-    void startScan(DEFAULT_SCAN_LIMIT, 'reset')
 })
 
 watch([reportStatus, reportSource], () => {
